@@ -289,10 +289,25 @@ public sealed class MainViewModel : ViewModelBase
         RemainingDisplay = p.EstimatedRemaining is { } r ? r.ToString(@"mm\:ss") : "--:--";
     }
 
+    /// <summary>Display order per spec: matched transactions first, unmatched
+    /// last, "to make review much easier." Rows are grouped into three tiers
+    /// — fully resolved matches, rows still needing attention, and rows with
+    /// no candidate at all — or ties within a tier broken by original row
+    /// number so the order stays stable and predictable.</summary>
+    private static int DisplaySortRank(TransactionRecord t) => t.Status switch
+    {
+        MatchStatus.MatchedExact or MatchStatus.MatchedDateTolerant or MatchStatus.MatchedCombination => 0,
+        MatchStatus.ManualReview or MatchStatus.PossibleDuplicate => 1,
+        MatchStatus.NoMatch => 2,
+        _ => 3, // Unmatched should never survive to display, but sorts last defensively if it does
+    };
+
     private void PopulateGrids(ReconciliationResult result)
     {
-        foreach (var b in result.BankTransactions) BankRows.Add(new TransactionRowViewModel(b));
-        foreach (var r in result.R365Transactions) R365Rows.Add(new TransactionRowViewModel(r));
+        foreach (var b in result.BankTransactions.OrderBy(DisplaySortRank).ThenBy(t => t.RowNumber))
+            BankRows.Add(new TransactionRowViewModel(b));
+        foreach (var r in result.R365Transactions.OrderBy(DisplaySortRank).ThenBy(t => t.RowNumber))
+            R365Rows.Add(new TransactionRowViewModel(r));
         RefreshFilteredViews();
     }
 

@@ -151,6 +151,7 @@
                             <DataGridTextColumn Header="Row" Binding="{Binding RowNumber}" Width="60"/>
                             <DataGridTextColumn Header="Date" Binding="{Binding DateDisplay}" Width="100"/>
                             <DataGridTextColumn Header="Amount" Binding="{Binding AmountDisplay}" Width="120"/>
+                            <DataGridTextColumn Header="Grouping" Binding="{Binding GroupingKey}" Width="90"/>
                             <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
                             <DataGridTemplateColumn Header="Status" Width="170" CellTemplate="{StaticResource StatusPillTemplate}"/>
                             <DataGridTextColumn Header="Confidence" Binding="{Binding ConfidenceDisplay}" Width="90"/>
@@ -168,7 +169,8 @@
                             <DataGridTextColumn Header="Row" Binding="{Binding RowNumber}" Width="60"/>
                             <DataGridTextColumn Header="Date" Binding="{Binding DateDisplay}" Width="100"/>
                             <DataGridTextColumn Header="Amount" Binding="{Binding AmountDisplay}" Width="120"/>
-                            <DataGridCheckBoxColumn Header="Grouped (R365)" Binding="{Binding IsGroupedPosting}" Width="110"/>
+                            <DataGridTextColumn Header="Grouping" Binding="{Binding GroupingKey}" Width="90"/>
+                            <DataGridCheckBoxColumn Header="R365 Ref# Match" Binding="{Binding IsGroupedPosting}" Width="120"/>
                             <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
                             <DataGridTemplateColumn Header="Status" Width="170" CellTemplate="{StaticResource StatusPillTemplate}"/>
                             <DataGridTextColumn Header="Confidence" Binding="{Binding ConfidenceDisplay}" Width="90"/>

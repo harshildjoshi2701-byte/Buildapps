@@ -48,7 +48,7 @@ public sealed class SettingsViewModel : ViewModelBase
 
     private void AddSpecialComboRule()
     {
-        var rule = new SpecialComboRule { BankColumn = 8, BankKeyword = string.Empty, R365Column = 16, R365Keyword = string.Empty };
+        var rule = new SpecialComboRule { BankColumn = 8, BankKeyword = string.Empty, R365Column = 2, R365Keyword = string.Empty };
         SpecialComboRules.Add(WrapRule(rule));
     }
 
@@ -159,12 +159,18 @@ public sealed class SettingsViewModel : ViewModelBase
         set { _working.Colors.NoMatchHex = value; OnPropertyChanged(); }
     }
 
+    // ---- Worksheet names (advanced) ----
+    public string BankWorksheetName { get => _working.Columns.BankWorksheetName; set { _working.Columns.BankWorksheetName = value; OnPropertyChanged(); } }
+    public string R365WorksheetName { get => _working.Columns.R365WorksheetName; set { _working.Columns.R365WorksheetName = value; OnPropertyChanged(); } }
+
     // ---- Column mapping (advanced) ----
     public int BankDateColumn { get => _working.Columns.BankDateColumn; set { _working.Columns.BankDateColumn = value; OnPropertyChanged(); } }
     public int BankCreditColumn { get => _working.Columns.BankCreditColumn; set { _working.Columns.BankCreditColumn = value; OnPropertyChanged(); } }
     public int BankDebitColumn { get => _working.Columns.BankDebitColumn; set { _working.Columns.BankDebitColumn = value; OnPropertyChanged(); } }
+    public int BankGroupingColumn { get => _working.Columns.BankGroupingColumn; set { _working.Columns.BankGroupingColumn = value; OnPropertyChanged(); } }
     public int BankCommentColumn { get => _working.Columns.BankCommentColumn; set { _working.Columns.BankCommentColumn = value; OnPropertyChanged(); } }
     public int R365DateColumn { get => _working.Columns.R365DateColumn; set { _working.Columns.R365DateColumn = value; OnPropertyChanged(); } }
+    public int R365GroupingColumn { get => _working.Columns.R365GroupingColumn; set { _working.Columns.R365GroupingColumn = value; OnPropertyChanged(); } }
     public int R365ReferenceColumn { get => _working.Columns.R365ReferenceColumn; set { _working.Columns.R365ReferenceColumn = value; OnPropertyChanged(); } }
     public int R365AmountColumn { get => _working.Columns.R365AmountColumn; set { _working.Columns.R365AmountColumn = value; OnPropertyChanged(); } }
     public int R365CommentColumn { get => _working.Columns.R365CommentColumn; set { _working.Columns.R365CommentColumn = value; OnPropertyChanged(); } }

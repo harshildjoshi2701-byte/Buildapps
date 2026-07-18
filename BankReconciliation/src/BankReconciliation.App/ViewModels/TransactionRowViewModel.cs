@@ -24,6 +24,7 @@ public sealed class TransactionRowViewModel
         Confidence = record.ConfidenceScore;
         GroupId = record.GroupId;
         IsGroupedPosting = record.IsGroupedPosting;
+        GroupingKey = record.GroupingKey;
     }
 
     public int RowNumber { get; }
@@ -37,6 +38,7 @@ public sealed class TransactionRowViewModel
     public int Confidence { get; }
     public int GroupId { get; }
     public bool IsGroupedPosting { get; }
+    public string GroupingKey { get; }
 
     public string AmountDisplay => Amount.ToString("C2");
     public string ConfidenceDisplay => Confidence > 0 ? $"{Confidence}%" : string.Empty;

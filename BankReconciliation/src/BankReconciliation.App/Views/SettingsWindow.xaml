@@ -88,6 +88,24 @@
                 <TextBlock Style="{StaticResource MutedTextStyle}" Margin="0,6,0,0" TextWrapping="Wrap"
                            Text="Combination matches always use a rotating palette of blue/purple shades (one per group) so related transactions are visually traceable — see README for how to customize the palette."/>
 
+                <TextBlock Text="Worksheet Names (Advanced)" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Style="{StaticResource MutedTextStyle}" TextWrapping="Wrap" Margin="0,0,0,10"
+                           Text="Bank and R365 transactions live on two separate worksheets. Change these if your workbook names them differently — a close case-insensitive match is also accepted."/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Text="Bank Worksheet Name" Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBox Width="200" HorizontalAlignment="Left" Text="{Binding BankWorksheetName, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="R365 Worksheet Name" Style="{StaticResource FieldLabelStyle}"/>
+                        <TextBox Width="200" HorizontalAlignment="Left" Text="{Binding R365WorksheetName, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
+                </Grid>
+
                 <TextBlock Text="Column Mapping (Advanced)" Style="{StaticResource SectionHeaderStyle}"/>
                 <TextBlock Style="{StaticResource MutedTextStyle}" TextWrapping="Wrap" Margin="0,0,0,10"
                            Text="Only change these if your workbook's layout differs from the standard template. Values are 1-based Excel column numbers (A=1, B=2, ... Z=26, AA=27)."/>
@@ -103,13 +121,17 @@
                         <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding BankCreditColumn, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="Bank: Debit Amount Column" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4"/>
                         <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding BankDebitColumn, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="Bank: Grouping Column" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4"/>
+                        <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding BankGroupingColumn, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="Bank: Comment Column" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4"/>
                         <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding BankCommentColumn, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="R365: Date Column" Style="{StaticResource FieldLabelStyle}"/>
                         <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding R365DateColumn, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Text="R365: Ref./Grouping Column" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4"/>
+                        <TextBlock Text="R365: Grouping Column" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4"/>
+                        <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding R365GroupingColumn, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Text="R365: Ref. # Column (older keyword rule, not Grouping)" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4" TextWrapping="Wrap"/>
                         <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding R365ReferenceColumn, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Text="R365: Amount Column" Style="{StaticResource FieldLabelStyle}" Margin="0,10,0,4"/>
                         <TextBox Style="{StaticResource FieldBoxStyle}" Text="{Binding R365AmountColumn, UpdateSourceTrigger=PropertyChanged}"/>
@@ -121,11 +143,11 @@
                 <TextBlock Text="Grouped Posting Keyword" Style="{StaticResource FieldLabelStyle}" Margin="0,14,0,4"/>
                 <TextBox Width="200" HorizontalAlignment="Left" Text="{Binding GroupKeyword, UpdateSourceTrigger=PropertyChanged}"/>
                 <TextBlock Style="{StaticResource MutedTextStyle}" Margin="0,4,0,0" TextWrapping="Wrap"
-                           Text="Case-insensitive text the Ref. # column is checked for to decide whether a row is a grouped (combination-eligible) posting."/>
+                           Text="Case-insensitive text the R365 Ref. # column is checked for (older, separate mechanism — not the Grouping column) to decide whether a row is a grouped (combination-eligible) posting."/>
 
                 <TextBlock Text="Custom Matching Rules (Advanced)" Style="{StaticResource SectionHeaderStyle}"/>
                 <TextBlock Style="{StaticResource MutedTextStyle}" TextWrapping="Wrap" Margin="0,0,0,10"
-                           Text="Every bank row whose column contains the bank keyword is grouped with every R365 row whose column contains the R365 keyword — unconditionally, no amount or date check. Runs first, before every other pass. Ships with one rule (Sysco/Online); add more for other known patterns."/>
+                           Text="Every bank row whose column contains the bank keyword is grouped with every R365 row whose column contains the R365 keyword — unconditionally, no amount or date check. Runs first, before every other pass, including Grouping-column matching. Ships with one rule (Bank column 8 / R365 Grouping column both contain &quot;Sysco&quot;); add more for other known patterns."/>
 
                 <ItemsControl ItemsSource="{Binding SpecialComboRules}">
                     <ItemsControl.ItemTemplate>
