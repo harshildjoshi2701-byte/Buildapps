@@ -1,6 +1,6 @@
 # Bank Reconciliation Tool
 
-A Windows desktop application that reconciles bank transactions against R365 (Restaurant365) transactions inside a single Excel workbook — matching amounts and dates, writing comments and color highlights back into the sheet, and producing a summary dashboard, all without touching the original file.
+A Windows desktop application that reconciles bank transactions against R365 (Restaurant365) transactions across two worksheets in an Excel workbook — matching amounts, dates, and explicit Grouping-column linkages, writing comments and color highlights back into the sheets, and producing a summary dashboard, all without touching the original file.
 
 ## Contents
 
@@ -21,9 +21,9 @@ A Windows desktop application that reconciles bank transactions against R365 (Re
 
 ## What it does
 
-The app opens a workbook containing two transaction blocks on one worksheet — a **Bank Transactions** block and an **R365 Transactions** block — and matches rows between them:
+The app opens a workbook containing two separate worksheets — a **Bank Transactions** sheet and an **R365 Transactions** sheet — and matches rows between them:
 
-- Exact amount + exact date matches first, then exact amount with a configurable date tolerance, then many-to-one **combination matches** (a single bank deposit that corresponds to a bundle of several R365 postings summed together).
+- Named/curated keyword rules first (e.g. "Sysco"), then explicit **Grouping-column** linkages (rows sharing a Grouping value are summed per side and compared as one unit — see below), then exact amount + exact date matches, then exact amount with a configurable date tolerance, then many-to-one **combination matches** (a single bank deposit that corresponds to a bundle of several R365 postings summed together).
 - Debits only match debits, credits only match credits (R365's signed Amount column is respected).
 - Every match, once made, locks both sides so nothing is ever reused.
 - Results are written back as cell comments, confidence scores, and color highlights directly in a copy of the workbook — the original file is never modified.
@@ -89,19 +89,22 @@ Launch `BankReconciliation.exe` directly, or install via `BankReconciliationSetu
 
 ## Matching algorithm
 
-Matching runs in five passes. Once a transaction (bank or R365) is matched in any pass, it is **locked** and never reconsidered by a later pass or a later transaction.
+Matching runs in six passes. Once a transaction (bank or R365) is matched in any pass, it is **locked** and never reconsidered by a later pass or a later transaction.
 
 | Pass | What it does |
 |---|---|
 | 1 | Custom matching rules — see below. Pure keyword grouping, not a search: no amount, sign, or date check. Runs FIRST, before anything else, because these are curated business rules rather than algorithmic guesses. |
-| 2 | One-to-one, exact amount, exact same date. |
-| 3 | One-to-one, exact amount, R365 date up to `MaxDateDifferenceDays` days *older* than the bank date (R365 dates are never newer, per the source data's convention). |
-| 4 | General combination matching — date-windowed subset-sum search, run THREE times over (each extra pass over whatever's still unmatched frequently finds matches the previous pass could not, now that other transactions have been claimed and candidate pools are smaller). |
-| 5 | Duplicate detection and finalizing — anything still unmatched is flagged Possible Duplicate (if it shares a date and amount with another unmatched row on its side) or No Match. |
+| 2 | Grouping-column bucket match — see below. Rows sharing a Grouping value are summed per side and compared as one unit; O(n) hash-bucket, not a search. |
+| 3 | One-to-one, exact amount, exact same date. |
+| 4 | One-to-one, exact amount, R365 date up to `MaxDateDifferenceDays` days *older* than the bank date (R365 dates are never newer, per the source data's convention). |
+| 5 | General combination matching — date-windowed subset-sum search, run THREE times over (each extra pass over whatever's still unmatched frequently finds matches the previous pass could not, now that other transactions have been claimed and candidate pools are smaller). |
+| 6 | Duplicate detection and finalizing — anything still unmatched is flagged Possible Duplicate (if it shares a date and amount with another unmatched row on its side) or No Match. |
 
-**Why custom matching rules run first.** They represent asserted, curated business knowledge (e.g. "bank rows mentioning Sysco always belong with R365 rows mentioning Online"), so they get first claim on the transaction pool. Running them after Passes 2/3 instead would let a handful of rows get peeled off individually by exact-amount coincidences before the rule ever saw them, fragmenting one clean, fully-explained group into a mix of small exact matches plus a named-rule group with an unexplained residual gap.
+**Why custom matching rules run first, and Grouping second.** Named rules represent asserted, curated business knowledge (e.g. "bank rows mentioning Sysco always belong with R365 rows also tagged Sysco"), so they get first claim on the transaction pool — see "Custom matching rules" below for why this specifically matters for the real workbook's data. Grouping-column matching runs immediately after, still ahead of every amount/date-based pass, because an explicit Grouping value is the next-most-certain signal available (stronger than a coincidental amount+date match). Running either after Pass 3/4 instead would let a handful of rows get peeled off individually by exact-amount coincidences before the rule/bucket ever saw them, fragmenting a clean, fully-explained group into a mix of small exact matches plus a residual, unexplained gap.
 
-**Grouped-posting rule.** By default, EVERY still-unmatched R365 row is eligible for Pass 4 combination matching, regardless of its Ref. # column contents — real-world data often has legitimate combinable postings that were never tagged. If you want the original stricter behavior back (only rows whose Ref. # column contains a keyword — `"R365"` by default — are combination-eligible, everything else strictly one-to-one), turn on **Require the grouped-posting keyword for combination matching** in Settings.
+**Grouping column (new).** Both sheets carry a "Grouping" column. A populated Grouping value is an ASSERTION the workbook has already made about which rows belong together — not a hint to search for a combination — so matching it is a hash-bucket operation: sum every Bank row sharing that exact value, sum every R365 row sharing it, compare. If the two totals tie out (within `AmountToleranceDollars`), every row in the bucket is matched together as one unit (`Matched (Grouping "X", N Transactions)`). If both sides have rows for that value but the totals don't tie out, every row is still locked and grouped (so you can see the variance) but flagged `Manual Review` instead. If only one sheet has rows for that value, they're locked and grouped as `No Match` — the Match ID column still clusters them together so the combined total is visible, but there's nothing on the other sheet to reconcile against. A blank Grouping value falls through to the normal per-row matching passes below (Passes 3–5) unchanged; a non-blank value is resolved by this mechanism exclusively and never falls through to per-row matching, even if the bucket doesn't tie out — see `GroupingMatcher`'s code remarks for the full reasoning, including why it deliberately runs AFTER named rules rather than before (that ordering is what keeps a Sysco-style keyword value in the same Grouping column from being incorrectly bucketed and sum-compared).
+
+**Grouped-posting rule (older, separate mechanism).** This is unrelated to the Grouping column above — it's the original per-row combination-eligibility flag, based on whether the R365 **Ref. #** column contains a keyword. By default, EVERY still-unmatched R365 row is eligible for Pass 5 combination matching, regardless of its Ref. # column contents — real-world data often has legitimate combinable postings that were never tagged. If you want the original stricter behavior back (only rows whose Ref. # column contains a keyword — `"R365"` by default — are combination-eligible, everything else strictly one-to-one), turn on **Require the grouped-posting keyword for combination matching** in Settings.
 
 **Combination search.** There is no fixed limit on group size — the engine has been validated against groups ranging from 2 up to 100+ transactions. Because true unrestricted subset-sum is NP-hard, the search is layered, cheapest and most-certain path first:
 
@@ -121,32 +124,36 @@ In production data the overwhelming majority of combinations resolve via steps 1
 
 **Highlight colors:** by default, only **No Match** rows get a fill color (red) — everything else (Matched, Manual Review, Combination) is left uncolored so the sheet stays clean and the eye goes straight to what actually needs attention. Turn off **Only highlight No Match rows in red** in Settings to restore full coloring: green = matched, yellow = Manual Review, red = No Match, and a rotating palette of blue/purple shades for combination matches (every transaction in the same combination group gets the *same* shade).
 
-**Custom matching rules.** Some patterns are known in advance rather than discovered by date proximity or amount — for example, a vendor whose bank charges and R365 postings should always be reconciled together as a category. Edit these from **Settings → Custom Matching Rules (Advanced)**: each rule is a Bank column number + a keyword to look for there, paired with an R365 column number + a keyword to look for there. The shipped default rule is bank column 8 (Description) contains **"Sysco"**, paired with R365 column 16 (Ref. #) contains **"Online"** — but every rule's columns are independent of both each other and of the Column Mapping section above, so you can add a rule against any two columns for any other known pairing. This is a pure keyword filter, not a search: it runs FIRST, before every other pass, is not restricted to the normal date window, and performs no amount, sign, or date check of any kind — if at least one row on each side contains its keyword, ALL of them (every matching bank row and every matching R365 row) are grouped into one single match together. A custom rule never leaves an eligible row as No Match. The match is written at a fixed confidence (`SpecialComboConfidenceScore`, default 90, JSON-only) regardless of how well the totals line up, and any dollar gap between the two sides is still visible in the Match Difference column (AB) since that's a live formula. Each rule forms its own separate match group; add or remove rules with the Settings window's Add Rule / Remove buttons.
+**Custom matching rules.** Some patterns are known in advance rather than discovered by date proximity or amount — for example, a vendor whose bank charges and R365 postings should always be reconciled together as a category, and whose totals were never expected to tie out exactly. Edit these from **Settings → Custom Matching Rules (Advanced)**: each rule is a Bank column number + a keyword to look for there, paired with an R365 column number + a keyword to look for there. The shipped default rule is bank column 8 contains **"Sysco"**, paired with the R365 **Grouping column** also containing **"Sysco"** — the real workbook uses that same Grouping column for both true numeric linking IDs (which DO sum-match, and are handled by the Grouping-column pass above) and the keyword "Sysco" (which never has). Keeping Sysco on this named-rule mechanism rather than the Grouping-column pass is deliberate; every rule's columns are independent of both each other and of the Column Mapping section above, so you can add a rule against any two columns for any other known pairing. This is a pure keyword filter, not a search: it runs FIRST, before every other pass (including Grouping), is not restricted to the normal date window, and performs no amount, sign, or date check of any kind — if at least one row on each side contains its keyword, ALL of them (every matching bank row and every matching R365 row) are grouped into one single match together. A custom rule never leaves an eligible row as No Match. The match is written at a fixed confidence (`SpecialComboConfidenceScore`, default 90, JSON-only) regardless of how well the totals line up, and any dollar gap between the two sides is still visible in the Match Difference column since that's a live formula. Each rule forms its own separate match group; add or remove rules with the Settings window's Add Rule / Remove buttons.
 
-**Match audit formulas (columns K / AB).** Column K holds a plain Excel formula, `=<credit>-<debit>` (e.g. `=F15-G15`), written for every Bank row — a signed net amount consistent with R365's signed Amount column. Column AB, written for every matched R365 row, holds `=SUMIF(<bank Match ID column>:<bank Match ID column>, <this row's Match ID>, K:K) - SUMIF(<R365 Match ID column>:<R365 Match ID column>, <this row's Match ID>, <R365 amount column>:<R365 amount column>)` — the bank side of the match group's total minus the R365 side's total. Zero means the group balances exactly; anything else is worth a second look. Both are real formulas (not pre-computed values), so they stay live if you edit a cell afterward. Controlled by the same **Write Match ID column** setting as columns J/AA.
+**Match audit formulas.** The Bank sheet's diff column holds a plain Excel formula, `=<credit>-<debit>` (e.g. `=F15-G15`), written for every Bank row — a signed net amount consistent with R365's signed Amount column. The R365 sheet's diff column, written for every matched R365 row, holds a cross-sheet formula — `=SUMIF('Bank Transactions'!<bank Match ID column>:<bank Match ID column>, <this row's Match ID>, 'Bank Transactions'!<bank diff column>:<bank diff column>) - SUMIF(<R365 Match ID column>:<R365 Match ID column>, <this row's Match ID>, <R365 amount column>:<R365 amount column>)` — the bank side of the match group's total minus the R365 side's total. Zero means the group balances exactly; anything else is worth a second look (this is exactly what surfaces a non-tying Grouping bucket's variance, too). Both are real formulas (not pre-computed values), so they stay live if you edit a cell afterward, and both reference the sheet each column actually lives on now that Bank and R365 are separate worksheets. Controlled by the same **Write Match ID column** setting as the Match ID columns.
 
 **Duplicate detection** flags bank and R365 rows that look like duplicates of another row on the same side (same amount, same or near-same date) independently of the matching passes, and is reported both as a per-row comment/status and in the Summary Dashboard.
 
 ## Column mapping
 
-Every column position is configurable in Settings (**Column Mapping (Advanced)**) rather than hard-coded, because real-world exports vary. The shipped defaults match the sample workbook used to validate this tool:
+Every column position — and both worksheet names — is configurable in Settings (**Column Mapping (Advanced)**) rather than hard-coded, because real-world exports vary and this workbook's own layout has already changed shape multiple times during development.
 
-| Field | Default column | Notes |
-|---|---|---|
-| Bank date | C | "Transaction Date" |
-| Bank credit amount | F | |
-| Bank debit amount | G | |
-| Bank description | H | display only; also the default Custom Matching Rules bank column (e.g. "Sysco") — each rule can point at a different column |
-| Bank comment (write target) | I | |
-| Bank Match ID (write target) | J | |
-| Bank net Credit-Debit formula (write target) | K | `=F{row}-G{row}`; feeds the AB audit formula |
-| R365 date | N | always same-day-or-older than the bank date |
-| R365 Ref. # / grouping column | P | checked for the grouped-posting keyword; also the default Custom Matching Rules R365 column (e.g. "Online") — each rule can point at a different column |
-| R365 description | U | display only |
-| R365 amount (signed) | Y | positive = credit, negative = debit |
-| R365 comment (write target) | Z | |
-| R365 Match ID (write target) | AA | |
-| R365 match-difference audit formula (write target) | AB | see "Match audit formulas" above |
+> **These defaults are placeholders, not confirmed values.** The workbook moved from one worksheet with Bank/R365 side by side to two separate sheets partway through development, in a session that could analyze the real file's *shape* (row/column counts, the Grouping column's behavior) but did not have an exact header-row listing to build the table below from. Verify every column number here against the real workbook's header row before trusting a run's results — Settings → Column Mapping is where to fix any that are wrong.
+
+| Field | Default sheet | Default column | Notes |
+|---|---|---|---|
+| Bank date | Bank Transactions | C | "Transaction Date" |
+| Bank credit amount | Bank Transactions | F | |
+| Bank debit amount | Bank Transactions | G | |
+| Bank description | Bank Transactions | H | display only |
+| Bank **Grouping** | Bank Transactions | H | same slot as Description above — reported to occupy the position Description held before the sheet split; also the default Custom Matching Rules bank column (checks for "Sysco") |
+| Bank comment (write target) | Bank Transactions | I | |
+| Bank Match ID (write target) | Bank Transactions | J | |
+| Bank net Credit-Debit formula (write target) | Bank Transactions | K | `=F{row}-G{row}`; feeds the R365-side audit formula |
+| R365 date | R365 Transactions | A | always same-day-or-older than the bank date |
+| R365 **Grouping** | R365 Transactions | B | reported to occupy the position a "Location #" column held before the sheet split; also the default Custom Matching Rules R365 column (checks for "Sysco") |
+| R365 Ref. # (older, separate mechanism) | R365 Transactions | C | checked for the grouped-posting keyword — see "Grouped-posting rule (older, separate mechanism)" above; NOT the same column as Grouping |
+| R365 description | R365 Transactions | D | display only |
+| R365 amount (signed) | R365 Transactions | E | positive = credit, negative = debit |
+| R365 comment (write target) | R365 Transactions | F | |
+| R365 Match ID (write target) | R365 Transactions | G | |
+| R365 match-difference audit formula (write target) | R365 Transactions | H | see "Match audit formulas" above |
 
 Header row, data start row, and the leftmost column of each highlight range are also configurable but are considered advanced/rarely-needed settings — edit `settings.json` directly (see [Settings reference](#settings-reference)) if your layout needs adjustment there.
 
@@ -171,11 +178,11 @@ Available in the **Settings** window:
 | Highlight full row | On | Color the entire row vs. just the comment cell (only applies to rows that get a color at all). |
 | Only highlight No Match rows in red | On | When on (default), Matched/Manual Review/Combination rows are left uncolored for a cleaner sheet. Turn off to restore full green/yellow/blue/red coloring. |
 | Highlight colors (Matched / Manual Review / No Match) | green / yellow / red | Hex, editable directly. |
-| Column mapping (Bank & R365) | see table above | 1-based Excel column numbers. |
-| Grouped Posting Keyword | `R365` | Case-insensitive substring checked in the Ref. # column. |
-| Hide blank columns / autofit to header | On | Hides the spacer columns between the Bank and R365 blocks, and autofits every column's width based on the row 2 header text. |
+| Column mapping (Bank & R365) | see table above | 1-based Excel column numbers, plus both worksheet names. |
+| Grouped Posting Keyword | `R365` | Case-insensitive substring checked in the R365 Ref. # column — the OLDER, separate mechanism, not the Grouping column. |
+| Autofit to header | On | Autofits every column's width on both sheets based on the header row text. No longer hides a spacer range — that existed only when Bank and R365 shared one worksheet. |
 
-Settings persist as JSON (via `ISettingsService`) in the user's local application data folder, so they survive app updates. Custom Matching Rules (`SpecialComboRules`) are fully editable from the Settings window — see "Custom matching rules" above. A few other advanced knobs exist only in that JSON file, not in the UI, because they rarely need changing: `MaxDpStates` (400,000), `PerTransactionTimeBudgetSeconds` (5.0), `SpecialComboConfidenceScore` (90, the fixed confidence score every custom-rule match is written at), and the header-row/data-start-row/first-column fields under column mapping.
+Settings persist as JSON (via `ISettingsService`) in the user's local application data folder, so they survive app updates. Custom Matching Rules (`SpecialComboRules`) are fully editable from the Settings window — see "Custom matching rules" above. A few other advanced knobs exist only in that JSON file, not in the UI, because they rarely need changing: `MaxDpStates` (400,000), `PerTransactionTimeBudgetSeconds` (5.0), `SpecialComboConfidenceScore` (90, the fixed confidence score every custom-rule match is written at), the header-row/data-start-row/first-column fields under column mapping, and — new, not yet UI-exposed — `BankGroupingColumn` / `R365GroupingColumn` (the Grouping column position on each sheet; see [Column mapping](#column-mapping)).
 
 ## Output files
 
@@ -189,8 +196,10 @@ Each run also writes a log file (human-readable `.log` plus a machine-readable `
 BankReconciliation.sln
 ├── src/BankReconciliation.Core/         Reconciliation engine — no UI/Windows dependency,
 │   ├── Models/                          reusable from a script, a service, or a different UI.
-│   ├── Matching/                        Passes 1–3, confidence scoring, duplicate detection.
-│   └── Services/                        Excel I/O (ClosedXML), logging, settings persistence.
+│   ├── Matching/                        GroupingMatcher (new), CombinationMatcher,
+│   │                                    OneToOneMatcher, confidence scoring, duplicate detection.
+│   └── Services/                        Excel I/O (ClosedXML) across two worksheets, logging,
+│                                        settings persistence.
 ├── src/BankReconciliation.Core.Tests/   xUnit tests for the matching engine.
 └── src/BankReconciliation.App/          WPF (net8.0-windows) desktop UI, MVVM.
     ├── ViewModels/
@@ -218,14 +227,19 @@ The matching algorithm (2-sum → 3-sum → bounded DP, with interval-merge clus
 
 ## Important: about this build
 
-This project was built in a sandboxed environment with **no .NET SDK available** and no way to install one (no root access, and Microsoft's package/CDN domains were blocked by the environment's network policy). That means:
+`BankReconciliation.Core` and `BankReconciliation.Core.Tests` — where all the actual reconciliation logic and financial correctness live — **have now been genuinely compiled and tested**, in a Linux CI-style environment that installed .NET 8 SDK via Ubuntu's own apt archive (Microsoft's own CDN was blocked by that environment's network policy, but Ubuntu's default package repo carries `dotnet-sdk-8.0` directly and isn't). This closes out the original build/test gap described below for the Core engine specifically:
 
-- `BankReconciliation.Core`, `BankReconciliation.Core.Tests`, and `BankReconciliation.App` were written carefully by hand, with the matching algorithm design independently validated by porting it to Python and running it against the real sample data (see [Performance notes](#performance-notes)) — but **none of the C# code has been compiled or executed** in this environment.
-- Every file was manually re-read and cross-checked (property names, method signatures, XAML bindings against their ViewModel properties, converter parameters, event wiring) as a substitute for a compiler. That review did catch and fix several real bugs before delivery — for example, a `RelayCommand` overload-resolution mismatch on four of the command bindings in `MainViewModel`, a missing XAML behavior class, an ARGB color-order mistake, and a layout row overlap — which is exactly the category of mistake a first `dotnet build` typically surfaces.
-- **Your first build should be treated as the true first compile.** It is quite possible — though not expected, given the review — that `dotnet build` surfaces a small remaining issue (a typo, a missing `using`, a namespace mismatch) that this review didn't catch. If it does, the error message will point at an exact file and line, which should make it a quick fix; the architecture and algorithm design underneath it are sound and were the primary focus of the engineering effort.
-- The **unit test suite** (`BankReconciliation.Core.Tests`, 36 tests across matching, duplicates, confidence scoring, and end-to-end engine behavior) was written to the same standard but likewise has never been run by an actual test runner — run `dotnet test` as part of your first build (which `build.bat` does automatically) and review the output.
+- A from-scratch `dotnet build` of `BankReconciliation.Core` succeeds with 0 warnings, 0 errors.
+- All 54 xUnit tests in `BankReconciliation.Core.Tests` pass (45 from the original hand-written suite, 9 new ones covering `GroupingMatcher`).
+- Two real, pre-existing bugs were found and fixed by this process, not just theorized about: `ReconciliationEngine.cs` referenced `SearchStats` unqualified when it's actually nested inside `CombinationMatcher` (a straightforward compile error); and `ConfidenceScorer.Combination()`'s count-penalty formula penalized even a clean 2-transaction combination, contradicting its own doc comment, which treats 2 transactions as the intended zero-penalty floor — the formula was re-anchored there rather than loosening the test that caught it.
 
-If anything doesn't compile cleanly, the most efficient path is to paste the exact compiler error into your AI assistant of choice along with the referenced file — the fix is very likely a one-line signature or `using` correction, not a design problem.
+**`BankReconciliation.App` (the WPF UI) is still unverified** — `Microsoft.NET.Sdk.WindowsDesktop` has no Linux build, so there is no way to compile or run a WPF project outside Windows. Everything below, written for the *original* v7 delivery, still applies specifically to the App project:
+
+- It was written carefully by hand and manually re-read and cross-checked (property names, method signatures, XAML bindings against their ViewModel properties, converter parameters, event wiring) as a substitute for a compiler — that review did catch and fix several real bugs before the original delivery (a `RelayCommand` overload-resolution mismatch, a missing XAML behavior class, an ARGB color-order mistake, a layout row overlap) — but it has never actually been compiled or run.
+- **Your first Windows build of the App project should be treated as the true first compile of that layer.** The error message, if any, will point at an exact file and line, which should make it a quick fix; the architecture underneath it is sound and was the primary focus of the engineering effort.
+- If anything doesn't compile cleanly, the most efficient path is to paste the exact compiler error into your AI assistant of choice along with the referenced file — the fix is very likely a one-line signature or `using` correction, not a design problem.
+
+**One more open item specific to the Grouping-column work:** the Column Mapping defaults for the new two-worksheet layout (see [Column mapping](#column-mapping)) are best-effort placeholders inferred from a prior analysis of the real file's *shape*, not a confirmed header-row listing — verify/correct them in Settings before trusting a run's results.
 
 ## Troubleshooting
 
