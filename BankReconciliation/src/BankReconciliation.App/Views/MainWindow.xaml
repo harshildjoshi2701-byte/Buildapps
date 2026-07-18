@@ -196,6 +196,8 @@
                 <TextBlock Text="{Binding OutputFilePath}" Style="{StaticResource MutedTextStyle}" VerticalAlignment="Center"
                            Margin="0,0,16,0" MaxWidth="480" TextTrimming="CharacterEllipsis"/>
                 <Button Content="View Log" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0" Command="{Binding OpenLogCommand}"/>
+                <Button Content="Export Needs-Review Report" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0" Command="{Binding ExportReportCommand}"
+                        ToolTip="Writes a CSV of every No Match / Manual Review / Possible Duplicate row from both sheets, for sharing without the full workbook"/>
                 <Button Content="Show in Folder" Style="{StaticResource SecondaryButtonStyle}" Margin="0,0,8,0" Command="{Binding OpenOutputFolderCommand}"/>
                 <Button Content="Open Output File" Style="{StaticResource PrimaryButtonStyle}" Command="{Binding OpenOutputCommand}"/>
             </StackPanel>

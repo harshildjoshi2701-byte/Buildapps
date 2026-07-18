@@ -35,6 +35,13 @@ public sealed class MainViewModel : ViewModelBase
     private CancellationTokenSource? _cts;
     private readonly Stopwatch _runStopwatch = new();
 
+    /// <summary>Snapshot of the most recent run's transaction lists, kept
+    /// only so <see cref="ExportReport"/> can build a report on demand
+    /// without re-running the engine. Not used for display — BankRows/R365Rows
+    /// (via TransactionRowViewModel) serve that.</summary>
+    private IReadOnlyList<TransactionRecord>? _lastBankTransactions;
+    private IReadOnlyList<TransactionRecord>? _lastR365Transactions;
+
     public MainViewModel(
         ISettingsService settingsService,
         ILoggingService loggingService,
@@ -59,6 +66,7 @@ public sealed class MainViewModel : ViewModelBase
         OpenOutputCommand = new RelayCommand(OpenOutputFile, () => !string.IsNullOrEmpty(OutputFilePath));
         OpenOutputFolderCommand = new RelayCommand(OpenOutputFolder, () => !string.IsNullOrEmpty(OutputFilePath));
         OpenLogCommand = new RelayCommand(OpenLog, () => !string.IsNullOrEmpty(LastLogFilePath));
+        ExportReportCommand = new RelayCommand(ExportReport, () => !string.IsNullOrEmpty(OutputFilePath));
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         ApplyStatusFilterCommand = new RelayCommand(p => StatusFilter = (string)p!);
     }
@@ -77,6 +85,7 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand OpenOutputCommand { get; }
     public RelayCommand OpenOutputFolderCommand { get; }
     public RelayCommand OpenLogCommand { get; }
+    public RelayCommand ExportReportCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
     public RelayCommand ApplyStatusFilterCommand { get; }
 
@@ -280,6 +289,8 @@ public sealed class MainViewModel : ViewModelBase
             LastLogFilePath = logPath;
             PopulateGrids(result);
             HasResults = true;
+            _lastBankTransactions = result.BankTransactions;
+            _lastR365Transactions = result.R365Transactions;
 
             _settingsService.AddRecentFile(Settings, SelectedFilePath);
             RecentFiles.Clear();
@@ -371,6 +382,23 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(LastLogFilePath) || !File.Exists(LastLogFilePath)) return;
         Process.Start(new ProcessStartInfo(LastLogFilePath) { UseShellExecute = true });
+    }
+
+    private void ExportReport(object? _)
+    {
+        if (_lastBankTransactions is null || _lastR365Transactions is null || string.IsNullOrEmpty(SelectedFilePath))
+            return;
+
+        try
+        {
+            var path = ReportExporter.ExportUnmatchedReport(_lastBankTransactions, _lastR365Transactions, SelectedFilePath);
+            StatusMessage = $"Needs-review report exported: {Path.GetFileName(path)}";
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ErrorRequested?.Invoke($"Failed to export the needs-review report:\n\n{ex.Message}");
+        }
     }
 
     private void ToggleTheme(object? _) => IsDarkMode = !IsDarkMode;
