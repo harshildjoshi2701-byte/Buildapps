@@ -1,0 +1,14 @@
+# .NET build output
+bin/
+obj/
+dist/
+*.user
+.vs/
+
+# Rider/VS Code
+.idea/
+*.suo
+
+# OS cruft
+.DS_Store
+Thumbs.db

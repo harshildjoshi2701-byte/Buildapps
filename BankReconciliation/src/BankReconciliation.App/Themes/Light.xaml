@@ -1,0 +1,44 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Light theme palette. Every brush here has a same-named counterpart in
+         Dark.xaml; App.xaml.cs swaps the whole dictionary at runtime, and
+         every control in the app binds via DynamicResource so the swap is
+         instant with no restart needed. -->
+
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F4F6F9"/>
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#1B2A41"/>
+    <SolidColorBrush x:Key="HeaderForegroundBrush" Color="#FFFFFF"/>
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1A202C"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5B6472"/>
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="#FFFFFF"/>
+
+    <SolidColorBrush x:Key="AppBorderBrush" Color="#D9DEE5"/>
+    <SolidColorBrush x:Key="DividerBrush" Color="#E7EAEF"/>
+
+    <SolidColorBrush x:Key="AccentBrush" Color="#2E6DE0"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#255BC0"/>
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#1E4A9E"/>
+
+    <SolidColorBrush x:Key="SecondaryButtonBackgroundBrush" Color="#EDF0F4"/>
+    <SolidColorBrush x:Key="SecondaryButtonHoverBrush" Color="#DFE4EA"/>
+
+    <SolidColorBrush x:Key="SuccessBrush" Color="#2EA07A"/>
+    <SolidColorBrush x:Key="SuccessBackgroundBrush" Color="#C6EFCE"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#B98900"/>
+    <SolidColorBrush x:Key="WarningBackgroundBrush" Color="#FFEB9C"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#C0392B"/>
+    <SolidColorBrush x:Key="DangerBackgroundBrush" Color="#FFC7CE"/>
+    <SolidColorBrush x:Key="InfoBrush" Color="#4A6FA5"/>
+    <SolidColorBrush x:Key="InfoBackgroundBrush" Color="#B4C7E7"/>
+
+    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="GridAlternatingRowBrush" Color="#F7F9FB"/>
+    <SolidColorBrush x:Key="GridHeaderBackgroundBrush" Color="#EEF1F5"/>
+
+    <DropShadowEffect x:Key="CardShadow" Color="#000000" Opacity="0.08" BlurRadius="14" ShadowDepth="2" Direction="270"/>
+
+</ResourceDictionary>
