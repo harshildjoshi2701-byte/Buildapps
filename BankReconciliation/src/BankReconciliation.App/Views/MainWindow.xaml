@@ -74,7 +74,7 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Background="#12FFFFFF" CornerRadius="6" Padding="10,8" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SelectedFilePath, TargetNullValue='No file selected — click Browse, or drag & drop a workbook anywhere in this window'}"
+                        <TextBlock Text="{Binding SelectedFilePath, TargetNullValue='No file selected — click Browse, or drag &amp; drop a workbook anywhere in this window'}"
                                    Foreground="{DynamicResource HeaderForegroundBrush}" TextTrimming="CharacterEllipsis"/>
                     </Border>
 
