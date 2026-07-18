@@ -174,8 +174,8 @@ public class CombinationMatcherTests
     [Fact]
     public void RunSpecialComboRules_MatchesAcrossWideDateGapIgnoringNormalWindow()
     {
-        // The default named rule (bank column 8 contains "Sysco" <-> R365
-        // Grouping column 2 also contains "Sysco") must group rows even when
+        // The default named rule (bank column 5 contains "Sysco" <-> R365
+        // Grouping column 4 also contains "Sysco") must group rows even when
         // they are much further apart than MaxDateDifferenceDays allows,
         // since named rules are not subject to the normal date window at all.
         var bank = new[]
@@ -186,14 +186,14 @@ public class CombinationMatcherTests
                 Side = TransactionSide.Bank,
                 Date = new DateTime(2026, 7, 1),
                 AmountCents = -18000,
-                RawColumns = new Dictionary<int, string> { [8] = "ACH Sysco Foods Payment" },
+                RawColumns = new Dictionary<int, string> { [5] = "ACH Sysco Foods Payment" },
             },
         };
         var r365 = new[]
         {
             // 30+ days before the bank date — would fail the normal window.
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
         };
         var settings = DefaultSettings();
         settings.MaxDateDifferenceDays = 6; // far narrower than the gap above
@@ -211,7 +211,7 @@ public class CombinationMatcherTests
     [Fact]
     public void RunSpecialComboRules_DoesNotFireWithoutBankKeyword()
     {
-        // A bank row whose column 8 does NOT contain "Sysco" must not be
+        // A bank row whose column 5 does NOT contain "Sysco" must not be
         // grouped with Sysco-tagged R365 rows even if the amounts would sum
         // correctly — the named rule is keyword-gated on both sides.
         var bank = new[]
@@ -222,13 +222,13 @@ public class CombinationMatcherTests
                 Side = TransactionSide.Bank,
                 Date = new DateTime(2026, 7, 1),
                 AmountCents = -18000,
-                RawColumns = new Dictionary<int, string> { [8] = "Wire Transfer - Vendor Payment" },
+                RawColumns = new Dictionary<int, string> { [5] = "Wire Transfer - Vendor Payment" },
             },
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
         };
         var settings = DefaultSettings();
         settings.MaxDateDifferenceDays = 6;
@@ -255,13 +255,13 @@ public class CombinationMatcherTests
                 Side = TransactionSide.Bank,
                 Date = new DateTime(2026, 7, 1),
                 AmountCents = -18000,
-                RawColumns = new Dictionary<int, string> { [8] = "ACH Sysco Foods Payment" },
+                RawColumns = new Dictionary<int, string> { [5] = "ACH Sysco Foods Payment" },
             },
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -6000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -6000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
         };
         var settings = DefaultSettings();
         var stats = new CombinationMatcher.SearchStats();
@@ -293,7 +293,7 @@ public class CombinationMatcherTests
                 Side = TransactionSide.Bank,
                 Date = new DateTime(2026, 1, 1),
                 AmountCents = -500000, // -$5,000.00
-                RawColumns = new Dictionary<int, string> { [8] = "ACH Sysco Foods Payment" },
+                RawColumns = new Dictionary<int, string> { [5] = "ACH Sysco Foods Payment" },
             },
             new TransactionRecord
             {
@@ -301,14 +301,14 @@ public class CombinationMatcherTests
                 Side = TransactionSide.Bank,
                 Date = new DateTime(2026, 6, 15),
                 AmountCents = 250, // +$2.50 — opposite sign, unrelated magnitude
-                RawColumns = new Dictionary<int, string> { [8] = "Sysco Corp Refund" },
+                RawColumns = new Dictionary<int, string> { [5] = "Sysco Corp Refund" },
             },
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
             // opposite sign, unrelated amount, far-off date
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 12, 18), AmountCents = 99999, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 12, 18), AmountCents = 99999, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
         };
         var settings = DefaultSettings();
         var stats = new CombinationMatcher.SearchStats();
@@ -339,12 +339,12 @@ public class CombinationMatcherTests
                 Side = TransactionSide.Bank,
                 Date = new DateTime(2026, 7, 1),
                 AmountCents = -18000,
-                RawColumns = new Dictionary<int, string> { [8] = "ACH Sysco Foods Payment" },
+                RawColumns = new Dictionary<int, string> { [5] = "ACH Sysco Foods Payment" },
             },
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -18000, RawColumns = new Dictionary<int, string> { [2] = "Check #4471" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -18000, RawColumns = new Dictionary<int, string> { [4] = "Check #4471" } },
         };
         var settings = DefaultSettings();
         var stats = new CombinationMatcher.SearchStats();

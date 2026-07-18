@@ -75,7 +75,6 @@ public static class GroupingMatcher
             bankRows ??= new List<TransactionRecord>();
             r365Rows ??= new List<TransactionRecord>();
 
-            var groupId = groupIds.Next();
             var allMembers = new List<TransactionRecord>(bankRows.Count + r365Rows.Count);
             allMembers.AddRange(bankRows);
             allMembers.AddRange(r365Rows);
@@ -83,14 +82,17 @@ public static class GroupingMatcher
             if (bankRows.Count == 0 || r365Rows.Count == 0)
             {
                 // One-sided: nothing on the other sheet carries this Grouping
-                // value at all. Still locked and grouped (so the Excel Match
-                // ID column clusters these rows together and their combined
-                // total is visible) but NOT eligible for later per-row
-                // matching — see class remarks on exclusivity.
+                // value at all. Locked (excluded from later per-row matching —
+                // see class remarks on exclusivity) but deliberately NOT given
+                // a real GroupId: a GroupId means "the engine paired this row
+                // with something," which is untrue here. Giving these a real
+                // id made the Excel Match ID column and the app's own Matched
+                // count include rows explicitly labeled "No Match" — see
+                // ReconciliationEngine's IsGenuinelyMatched.
                 var side = bankRows.Count == 0 ? "R365" : "Bank";
                 var totalCents = allMembers.Sum(m => m.AmountCents);
                 var comment = $"No Match (Grouping \"{key}\" — {allMembers.Count} {side}-side transaction(s) totaling {MoneyMath.ToDollars(totalCents):C}, no corresponding Grouping value on the other sheet)";
-                Lock(allMembers, MatchStatus.NoMatch, comment, confidence: 0, groupId);
+                Lock(allMembers, MatchStatus.NoMatch, comment, confidence: 0, groupId: -1);
                 continue;
             }
 
@@ -99,6 +101,7 @@ public static class GroupingMatcher
 
             if (MoneyMath.AmountsEqual(bankSum, r365Sum, settings.AmountToleranceDollars))
             {
+                var groupId = groupIds.Next();
                 var maxDateDiff = (int)(allMembers.Max(m => m.Date) - allMembers.Min(m => m.Date)).TotalDays;
                 var confidence = ConfidenceScorer.Combination(allMembers.Count, maxDateDiff, settings.MaxDateDifferenceDays, ambiguous: false);
                 var comment = $"Matched (Grouping \"{key}\", {allMembers.Count} Transactions)";
@@ -107,9 +110,12 @@ public static class GroupingMatcher
             }
             else
             {
+                // Both sides present but totals don't tie out — needs a human
+                // to look at it. Locked, like the one-sided case above, but
+                // also NOT given a real GroupId: ManualReview is not a match.
                 var diffDollars = MoneyMath.ToDollars(Math.Abs(bankSum - r365Sum));
                 var comment = $"Manual Review (Grouping \"{key}\" — Bank total {MoneyMath.ToDollars(bankSum):C} vs R365 total {MoneyMath.ToDollars(r365Sum):C}, differs by {diffDollars:C})";
-                Lock(allMembers, MatchStatus.ManualReview, comment, confidence: 0, groupId);
+                Lock(allMembers, MatchStatus.ManualReview, comment, confidence: 0, groupId: -1);
             }
         }
         return tiedOutCount;

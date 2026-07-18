@@ -155,9 +155,9 @@ public sealed class ReconciliationEngine : IReconciliationEngine
         {
             TotalBankTransactions = allBank.Count,
             TotalR365Transactions = allR365.Count,
-            MatchedBankTransactions = allBank.Count(b => b.IsMatched),
-            MatchedR365Transactions = allR365.Count(r => r.IsMatched),
-            MatchedAmount = allBank.Where(b => b.IsMatched).Sum(b => Math.Abs(b.AmountDollars)),
+            MatchedBankTransactions = allBank.Count(b => IsGenuinelyMatched(b.Status)),
+            MatchedR365Transactions = allR365.Count(r => IsGenuinelyMatched(r.Status)),
+            MatchedAmount = allBank.Where(b => IsGenuinelyMatched(b.Status)).Sum(b => Math.Abs(b.AmountDollars)),
             UnmatchedBankTransactions = allBank.Count(b => b.Status == MatchStatus.NoMatch),
             UnmatchedR365Transactions = allR365.Count(r => r.Status == MatchStatus.NoMatch),
             OneToOneMatches = exactMatchCount + dateTolerantMatchCount,
@@ -189,6 +189,20 @@ public sealed class ReconciliationEngine : IReconciliationEngine
             Log = log,
         };
     }
+
+    /// <summary>True for the three terminal statuses that represent an actual
+    /// match (exact, date-tolerant, or combination/grouping). Deliberately
+    /// NOT the same thing as <see cref="TransactionRecord.IsMatched"/>: that
+    /// flag also covers rows a matcher has merely finished deciding about —
+    /// e.g. <see cref="GroupingMatcher"/> sets it for a one-sided
+    /// <see cref="MatchStatus.NoMatch"/> bucket too, purely to keep the row
+    /// out of later passes (see that class's exclusivity remarks). Anything
+    /// reporting "how many matched" — this summary, <see cref="BuildMatchGroups"/> —
+    /// must use Status, not IsMatched, or a NoMatch/ManualReview row gets
+    /// counted as both matched and unmatched at once. Mirrors the same
+    /// tri-state check the UI already uses (MainViewModel.DisplaySortRank).</summary>
+    private static bool IsGenuinelyMatched(MatchStatus status) =>
+        status is MatchStatus.MatchedExact or MatchStatus.MatchedDateTolerant or MatchStatus.MatchedCombination;
 
     /// <summary>Every matched transaction — one-to-one or combination — carries
     /// a GroupId from the same shared sequence (see <see cref="GroupIdGenerator"/>),

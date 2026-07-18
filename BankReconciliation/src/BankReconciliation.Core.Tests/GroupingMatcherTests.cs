@@ -58,7 +58,7 @@ public class GroupingMatcherTests
     }
 
     [Fact]
-    public void MatchAll_BothSidesPresentButTotalsDiffer_FlagsManualReviewAndStillLocksAndGroups()
+    public void MatchAll_BothSidesPresentButTotalsDiffer_FlagsManualReviewAndLocksButAssignsNoRealGroupId()
     {
         var bank = new[] { Bank(1, 10, 949652.13m, groupingKey: "6") };
         var r365 = new[]
@@ -74,11 +74,15 @@ public class GroupingMatcherTests
         Assert.Equal(MatchStatus.ManualReview, bank[0].Status);
         Assert.Contains("differs by", bank[0].Comment);
         Assert.All(r365, r => Assert.True(r.IsMatched));
-        Assert.All(r365, r => Assert.Equal(bank[0].GroupId, r.GroupId)); // still visually grouped
+        // ManualReview is not a match, so no real GroupId — a positive id here
+        // would make BuildMatchGroups and the Excel Match ID column show this
+        // as matched, contradicting its own status.
+        Assert.Equal(-1, bank[0].GroupId);
+        Assert.All(r365, r => Assert.Equal(-1, r.GroupId));
     }
 
     [Fact]
-    public void MatchAll_OnlyOneSideHasTheGroupingValue_FlagsNoMatchButStillGroupsAndLocks()
+    public void MatchAll_OnlyOneSideHasTheGroupingValue_FlagsNoMatchAndLocksButAssignsNoRealGroupId()
     {
         var bank = Array.Empty<TransactionRecord>();
         var r365 = new[]
@@ -92,7 +96,11 @@ public class GroupingMatcherTests
         Assert.Equal(0, matched);
         Assert.All(r365, r => Assert.True(r.IsMatched)); // locked so it's never picked up by a later pass
         Assert.All(r365, r => Assert.Equal(MatchStatus.NoMatch, r.Status));
-        Assert.Equal(r365[0].GroupId, r365[1].GroupId); // grouped together despite having no Bank counterpart
+        // No real GroupId: NoMatch is not a match (see remarks on the other
+        // ManualReview test above) — this is the exact bug that made a
+        // one-sided bucket's rows count as both matched and unmatched at
+        // once in the app's own summary and Excel output.
+        Assert.All(r365, r => Assert.Equal(-1, r.GroupId));
     }
 
     [Fact]

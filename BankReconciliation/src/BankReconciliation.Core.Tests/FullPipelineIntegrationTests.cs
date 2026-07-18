@@ -32,60 +32,50 @@ public class FullPipelineIntegrationTests : IDisposable
     [Fact]
     public async Task FullPipeline_RealWorldGroupingScenario_ProducesExpectedOutcomeForEveryCase()
     {
-        var mapping = new ColumnMapping
-        {
-            BankWorksheetName = "Bank Transactions",
-            R365WorksheetName = "R365 Transactions",
-            BankHeaderRow = 2, BankDataStartRow = 3, BankFirstColumn = 1,
-            BankDateColumn = 3, BankCreditColumn = 6, BankDebitColumn = 7,
-            BankGroupingColumn = 8, BankDescriptionColumn = 8,
-            BankCommentColumn = 9, BankConfidenceColumn = 10, BankDiffColumn = 11,
-            R365HeaderRow = 2, R365DataStartRow = 3, R365FirstColumn = 1,
-            R365DateColumn = 1, R365GroupingColumn = 2, R365ReferenceColumn = 3,
-            R365DescriptionColumn = 4, R365AmountColumn = 5,
-            R365CommentColumn = 6, R365ConfidenceColumn = 7, R365DiffColumn = 8,
-        };
-        // Default SpecialComboRules already targets BankColumn=8/"Sysco" and
-        // R365Column=2/"Sysco" — exactly this mapping's Grouping columns.
-        var settings = new ReconciliationSettings { Columns = mapping, MaxThreads = 1 };
+        // Real confirmed layout (see ColumnMapping remarks) rather than a
+        // hand-picked one: headers on row 4, data from row 5, Grouping at
+        // Bank column 5 / R365 column 4. Default SpecialComboRules targets
+        // BankColumn=5/"Sysco" and R365Column=4/"Sysco" — exactly these.
+        var settings = new ReconciliationSettings { MaxThreads = 1 };
+        var mapping = settings.Columns;
 
         using var wb = new XLWorkbook();
         var bankWs = wb.Worksheets.Add("Bank Transactions");
         var r365Ws = wb.Worksheets.Add("R365 Transactions");
         var baseDate = new DateTime(2026, 6, 1);
-        int bankRow = 3, r365Row = 3;
+        int bankRow = mapping.BankDataStartRow, r365Row = mapping.R365DataStartRow;
 
         // Case 1: numeric Grouping ID that ties out exactly (1 bank vs 3 R365).
-        bankWs.Cell(bankRow, 3).Value = baseDate; bankWs.Cell(bankRow, 6).Value = 600.00; bankWs.Cell(bankRow, 8).Value = "10";
+        bankWs.Cell(bankRow, mapping.BankDateColumn).Value = baseDate; bankWs.Cell(bankRow, mapping.BankCreditColumn).Value = 600.00; bankWs.Cell(bankRow, mapping.BankGroupingColumn).Value = "10";
         bankRow++;
         foreach (var amt in new[] { 100.00, 200.00, 300.00 })
         {
-            r365Ws.Cell(r365Row, 1).Value = baseDate.AddDays(-2); r365Ws.Cell(r365Row, 5).Value = amt; r365Ws.Cell(r365Row, 2).Value = "10";
+            r365Ws.Cell(r365Row, mapping.R365DateColumn).Value = baseDate.AddDays(-2); r365Ws.Cell(r365Row, mapping.R365AmountColumn).Value = amt; r365Ws.Cell(r365Row, mapping.R365GroupingColumn).Value = "10";
             r365Row++;
         }
 
         // Case 2: numeric Grouping ID that does NOT tie out (real variance shape).
-        bankWs.Cell(bankRow, 3).Value = baseDate; bankWs.Cell(bankRow, 6).Value = 949652.13; bankWs.Cell(bankRow, 8).Value = "6";
+        bankWs.Cell(bankRow, mapping.BankDateColumn).Value = baseDate; bankWs.Cell(bankRow, mapping.BankCreditColumn).Value = 949652.13; bankWs.Cell(bankRow, mapping.BankGroupingColumn).Value = "6";
         bankRow++;
-        r365Ws.Cell(r365Row, 1).Value = baseDate.AddDays(-1); r365Ws.Cell(r365Row, 5).Value = 947882.58; r365Ws.Cell(r365Row, 2).Value = "6";
+        r365Ws.Cell(r365Row, mapping.R365DateColumn).Value = baseDate.AddDays(-1); r365Ws.Cell(r365Row, mapping.R365AmountColumn).Value = 947882.58; r365Ws.Cell(r365Row, mapping.R365GroupingColumn).Value = "6";
         r365Row++;
 
         // Case 3: Grouping ID only on the R365 side (one-sided, no Bank counterpart).
         foreach (var amt in new[] { 50.00, 75.00 })
         {
-            r365Ws.Cell(r365Row, 1).Value = baseDate.AddDays(-3); r365Ws.Cell(r365Row, 5).Value = amt; r365Ws.Cell(r365Row, 2).Value = "99";
+            r365Ws.Cell(r365Row, mapping.R365DateColumn).Value = baseDate.AddDays(-3); r365Ws.Cell(r365Row, mapping.R365AmountColumn).Value = amt; r365Ws.Cell(r365Row, mapping.R365GroupingColumn).Value = "99";
             r365Row++;
         }
 
         // Case 4: Sysco named rule — keyword in the SAME Grouping column, deliberately does not sum-match.
-        bankWs.Cell(bankRow, 3).Value = baseDate; bankWs.Cell(bankRow, 6).Value = 180.00; bankWs.Cell(bankRow, 8).Value = "Sysco";
+        bankWs.Cell(bankRow, mapping.BankDateColumn).Value = baseDate; bankWs.Cell(bankRow, mapping.BankCreditColumn).Value = 180.00; bankWs.Cell(bankRow, mapping.BankGroupingColumn).Value = "Sysco";
         bankRow++;
-        r365Ws.Cell(r365Row, 1).Value = baseDate.AddDays(-5); r365Ws.Cell(r365Row, 5).Value = 110.00; r365Ws.Cell(r365Row, 2).Value = "Sysco";
+        r365Ws.Cell(r365Row, mapping.R365DateColumn).Value = baseDate.AddDays(-5); r365Ws.Cell(r365Row, mapping.R365AmountColumn).Value = 110.00; r365Ws.Cell(r365Row, mapping.R365GroupingColumn).Value = "Sysco";
         r365Row++;
 
         // Case 5: plain ungrouped exact match (blank Grouping cell).
-        bankWs.Cell(bankRow, 3).Value = baseDate; bankWs.Cell(bankRow, 6).Value = 42.50;
-        r365Ws.Cell(r365Row, 1).Value = baseDate; r365Ws.Cell(r365Row, 5).Value = 42.50;
+        bankWs.Cell(bankRow, mapping.BankDateColumn).Value = baseDate; bankWs.Cell(bankRow, mapping.BankCreditColumn).Value = 42.50;
+        r365Ws.Cell(r365Row, mapping.R365DateColumn).Value = baseDate; r365Ws.Cell(r365Row, mapping.R365AmountColumn).Value = 42.50;
 
         var sourcePath = Path.Combine(_tempDir, "Scenario.xlsx");
         wb.SaveAs(sourcePath);
@@ -130,12 +120,13 @@ public class FullPipelineIntegrationTests : IDisposable
         var outputBankWs = outputWb.Worksheet("Bank Transactions");
         var outputR365Ws = outputWb.Worksheet("R365 Transactions");
 
-        // Bank rows, in write order: 3=group10, 4=group6, 5=Sysco, 6=plain.
-        Assert.False(outputBankWs.Cell(3, 10).IsEmpty()); // group-10 bank row got a Match ID
-        Assert.Contains("Grouping", outputBankWs.Cell(4, 9).GetString()); // group-6 bank row's comment mentions Grouping
-        Assert.Contains("Named Rule", outputBankWs.Cell(5, 9).GetString()); // Sysco bank row
-        Assert.Equal("Matched (Exact)", outputBankWs.Cell(6, 9).GetString()); // plain exact-match bank row
-        // R365 rows, in write order: 3-5=group10, 6=group6, 7-8=group99, 9=Sysco, 10=plain.
-        Assert.False(outputR365Ws.Cell(7, 6).IsEmpty()); // first group-99 R365 row got a comment written
+        // Bank rows, in write order (data starts at mapping.BankDataStartRow):
+        // 5=group10, 6=group6, 7=Sysco, 8=plain.
+        Assert.False(outputBankWs.Cell(5, mapping.BankConfidenceColumn).IsEmpty()); // group-10 bank row got a Match ID
+        Assert.Contains("Grouping", outputBankWs.Cell(6, mapping.BankCommentColumn).GetString()); // group-6 bank row's comment mentions Grouping
+        Assert.Contains("Named Rule", outputBankWs.Cell(7, mapping.BankCommentColumn).GetString()); // Sysco bank row
+        Assert.Equal("Matched (Exact)", outputBankWs.Cell(8, mapping.BankCommentColumn).GetString()); // plain exact-match bank row
+        // R365 rows, in write order: 5-7=group10, 8=group6, 9-10=group99, 11=Sysco, 12=plain.
+        Assert.False(outputR365Ws.Cell(9, mapping.R365CommentColumn).IsEmpty()); // first group-99 R365 row got a comment written
     }
 }

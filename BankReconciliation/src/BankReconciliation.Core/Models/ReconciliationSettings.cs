@@ -41,8 +41,8 @@ public sealed class ReconciliationSettings
     /// unrestricted by the normal date window. See <see cref="SpecialComboRule"/>
     /// and <see cref="Matching.CombinationMatcher"/> remarks.
     ///
-    /// The shipped default rule now targets the new Grouping column on BOTH
-    /// sides (column 8 / column 2 — see <see cref="ColumnMapping.BankGroupingColumn"/>
+    /// The shipped default rule targets the Grouping column on BOTH sides
+    /// (column 5 / column 4 — see <see cref="ColumnMapping.BankGroupingColumn"/>
     /// and <see cref="ColumnMapping.R365GroupingColumn"/>), checking for the
     /// literal value "Sysco" on each: the real workbook's Grouping column was
     /// found to hold "Sysco" as a keyword tag that never sum-matches (unlike
@@ -53,7 +53,7 @@ public sealed class ReconciliationSettings
     /// rules first makes the split correct with no special-casing required.</summary>
     public List<SpecialComboRule> SpecialComboRules { get; set; } = new()
     {
-        new SpecialComboRule { BankColumn = 8, BankKeyword = "Sysco", R365Column = 2, R365Keyword = "Sysco" },
+        new SpecialComboRule { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
     };
 
     /// <summary>Confidence score assigned to every match found by a
@@ -103,11 +103,13 @@ public sealed class ReconciliationSettings
     public bool AutoSaveOutput { get; set; } = true;
 
     /// <summary>Writes a unique, sortable Match ID number into the confidence
-    /// column (J for Bank, AA for R365) for every matched row — the SAME
-    /// number on the bank row and the R365 row(s) it matched with, so sorting
-    /// either block by that column groups a match's transactions together.
-    /// Unmatched rows are left blank in that column. Also gates the K/AB
-    /// helper-formula columns, which depend on the Match ID columns.</summary>
+    /// column (<see cref="ColumnMapping.BankConfidenceColumn"/> for Bank,
+    /// <see cref="ColumnMapping.R365ConfidenceColumn"/> for R365) for every
+    /// matched row — the SAME number on the bank row and the R365 row(s) it
+    /// matched with, so sorting either block by that column groups a match's
+    /// transactions together. Unmatched rows are left blank in that column.
+    /// Also gates the Diff helper-formula columns, which depend on the Match
+    /// ID columns.</summary>
     public bool WriteConfidenceColumn { get; set; } = true;
 
     public bool HighlightFullRow { get; set; } = true;

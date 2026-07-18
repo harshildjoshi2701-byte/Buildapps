@@ -11,16 +11,18 @@ namespace BankReconciliation.Core.Models;
 /// position configurable from Settings — so the next structural tweak is a
 /// Settings edit, not a code change.
 ///
-/// AS OF THIS VERSION: the workbook moved from one worksheet with Bank and
-/// R365 blocks side by side (columns A:K and N:AB) to two separate
-/// worksheets, each with its own column range starting at A, plus a new
-/// "Grouping" column on both sheets (see <see cref="Matching.GroupingMatcher"/>).
-/// The defaults below are BEST-EFFORT placeholders inferred from a prior
-/// analysis of the real file's shape (12 Bank columns, 10 R365 columns;
-/// Grouping reported to occupy the position Description used to hold on the
-/// Bank sheet) — NOT confirmed against an actual header row. Verify/correct
-/// every column number here against the real workbook before relying on a
-/// run's results.
+/// AS OF THIS VERSION: two separate worksheets, each with its own column
+/// range starting at A, plus a "Grouping" column on both sheets (see
+/// <see cref="Matching.GroupingMatcher"/>). The defaults below are CONFIRMED
+/// against a real reconciled output file the user provided (title row 1,
+/// an instructional row 2, blank row 3, headers on row 4, data from row 5) —
+/// not guesses. The one field that was wrong in practice (Bank Grouping,
+/// entered as column 4 "Account Name" instead of column 5 "Grouping") is
+/// exactly what caused nearly the entire Bank sheet to collapse into one
+/// false "AP ACCOUNT" bucket, since every bank row shares that account name.
+/// If you change the workbook's shape again, re-verify every field here —
+/// but don't assume it's wrong just because a run looks off; check the
+/// actual header row first.
 /// </summary>
 public sealed class ColumnMapping
 {
@@ -28,36 +30,45 @@ public sealed class ColumnMapping
     public string BankWorksheetName { get; set; } = "Bank Transactions";
     public string R365WorksheetName { get; set; } = "R365 Transactions";
 
-    // ---- Bank sheet (placeholder defaults: A:K data, comment/matchID/diff write targets) ----
-    public int BankHeaderRow { get; set; } = 2;
-    public int BankDataStartRow { get; set; } = 3;
+    // ---- Bank sheet (confirmed against the real workbook: headers on row 4, data from row 5) ----
+    public int BankHeaderRow { get; set; } = 4;
+    public int BankDataStartRow { get; set; } = 5;
     public int BankFirstColumn { get; set; } = 1;   // A — start of the highlight range
-    public int BankDateColumn { get; set; } = 3;    // C — "Transaction Date"
-    public int BankCreditColumn { get; set; } = 6;  // F — "Credit Amount"
-    public int BankDebitColumn { get; set; } = 7;   // G — "Debit Amount"
-    public int BankDescriptionColumn { get; set; } = 8; // H — display only
+    public int BankDateColumn { get; set; } = 1;    // A — "Date"
+    public int BankCreditColumn { get; set; } = 7;  // G — "Credit"
+    public int BankDebitColumn { get; set; } = 8;   // H — "Debit"
+    public int BankDescriptionColumn { get; set; } = 6; // F — "Transaction Detail", display only
 
     /// <summary>1-based Excel column number of the Bank sheet's "Grouping"
-    /// column. Placeholder default reuses column 8 (H) — the prior analysis
-    /// reported Grouping occupying the position the old Description column
-    /// held before the sheet split, so this is a reasonable starting guess,
-    /// not a confirmed position.</summary>
-    public int BankGroupingColumn { get; set; } = 8;
+    /// column (E / 5). Confirmed against the real workbook's header row.
+    /// Column 4 ("Account Name") sits immediately before it and holds the
+    /// SAME constant value for every row on a single-account statement —
+    /// entering 4 here instead of 5 is exactly the bug that made an entire
+    /// bank sheet collapse into one false Grouping bucket.</summary>
+    public int BankGroupingColumn { get; set; } = 5;
 
-    public int BankCommentColumn { get; set; } = 9; // I — Reconciliation Comment (write target)
-    public int BankConfidenceColumn { get; set; } = 10; // J — Match ID (write target)
-    public int BankDiffColumn { get; set; } = 11; // K — =Credit-Debit helper formula (write target)
+    public int BankCommentColumn { get; set; } = 12; // L — "Notes" (write target)
 
-    // ---- R365 sheet (placeholder defaults: A:H data, compacted to its own sheet) ----
-    public int R365HeaderRow { get; set; } = 2;
-    public int R365DataStartRow { get; set; } = 3;
+    /// <summary>Match ID write target. Deliberately placed in a NEW column
+    /// past the real workbook's own columns (1-12) rather than reusing one
+    /// of them — the real sheet's own column 10/11 are labeled "Match
+    /// Status"/"Match ID" for a different purpose, and writing here under
+    /// those headers previously stamped a misleading Match ID number onto
+    /// rows the Notes column simultaneously called "No Match".</summary>
+    public int BankConfidenceColumn { get; set; } = 13; // M
+    public int BankDiffColumn { get; set; } = 14; // N — =Credit-Debit helper formula (write target)
+
+    // ---- R365 sheet (confirmed against the real workbook: headers on row 4, data from row 5) ----
+    public int R365HeaderRow { get; set; } = 4;
+    public int R365DataStartRow { get; set; } = 5;
     public int R365FirstColumn { get; set; } = 1;    // A — start of the highlight range
     public int R365DateColumn { get; set; } = 1;     // A — "Date"
 
     /// <summary>1-based Excel column number of the R365 sheet's "Grouping"
-    /// column (reported to occupy the position a "Location #" column used to
-    /// hold). Placeholder default — verify against the real header row.</summary>
-    public int R365GroupingColumn { get; set; } = 2; // B
+    /// column (D / 4). Confirmed against the real workbook: 137 distinct
+    /// values observed (mostly numeric linking IDs, plus the "Sysco"
+    /// keyword bucket handled separately by <see cref="Matching.CombinationMatcher.RunSpecialComboRules"/>).</summary>
+    public int R365GroupingColumn { get; set; } = 4; // D
 
     /// <summary>R365's older "Ref. #" column — a DIFFERENT field from
     /// <see cref="R365GroupingColumn"/>. This is the original per-row
@@ -66,11 +77,16 @@ public sealed class ColumnMapping
     /// cross-sheet linking-ID mechanism. Both are retained side by side per
     /// spec ("retain all previous matching rules").</summary>
     public int R365ReferenceColumn { get; set; } = 3; // C — "Ref. #"
-    public int R365DescriptionColumn { get; set; } = 4; // D — display only
-    public int R365AmountColumn { get; set; } = 5;  // E — signed "Amount"
-    public int R365CommentColumn { get; set; } = 6; // F — Reconciliation Comment (write target)
-    public int R365ConfidenceColumn { get; set; } = 7; // G — Match ID (write target)
-    public int R365DiffColumn { get; set; } = 8; // H — match-group difference-check formula (write target)
+    public int R365DescriptionColumn { get; set; } = 6; // F — "Comment", display only
+    public int R365AmountColumn { get; set; } = 7;  // G — signed "Amount"
+    public int R365CommentColumn { get; set; } = 10; // J — "Notes" (write target)
+
+    /// <summary>Match ID write target — see <see cref="BankConfidenceColumn"/>
+    /// remarks; same reasoning, a fresh column past the real sheet's own
+    /// data rather than reusing (or the previous stale default's column 27,
+    /// a leftover from before Bank/R365 were split into separate sheets).</summary>
+    public int R365ConfidenceColumn { get; set; } = 11; // K
+    public int R365DiffColumn { get; set; } = 12; // L — match-group difference-check formula (write target)
 
     /// <summary>Case-insensitive substring the R365 "Ref. #" column is checked
     /// against to decide grouped-posting (combination-eligible) vs strict

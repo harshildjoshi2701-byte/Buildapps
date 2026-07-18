@@ -93,6 +93,34 @@ public class ReconciliationEngineTests
     }
 
     [Fact]
+    public async Task RunAsync_OneSidedGroupingBucket_CountsAsUnmatchedOnlyNeverAlsoMatched()
+    {
+        // Regression test for a real production bug: a whole sheet's worth of
+        // rows sharing one non-blank Grouping value with nothing on the other
+        // sheet (e.g. every bank row on a single-account statement carrying
+        // the same "Account Name" text in a misconfigured Grouping column)
+        // must be reported as unmatched, never as BOTH matched and unmatched
+        // at once. GroupingMatcher locks these rows (IsMatched=true, to keep
+        // them out of later passes) but they are NOT a genuine match, so the
+        // summary must key off Status, not IsMatched.
+        var bank = new List<TransactionRecord>();
+        for (int i = 0; i < 50; i++)
+            bank.Add(Bank(i + 1, 0, 100.00m + i, groupingKey: "AP ACCOUNT"));
+        var r365 = new List<TransactionRecord>(); // nothing on the other side at all
+
+        var engine = new ReconciliationEngine();
+        var result = await engine.RunAsync(bank, r365, DefaultSettings());
+        var summary = result.Summary;
+
+        Assert.Equal(50, summary.TotalBankTransactions);
+        Assert.Equal(0, summary.MatchedBankTransactions);
+        Assert.Equal(50, summary.UnmatchedBankTransactions);
+        Assert.All(bank, b => Assert.Equal(MatchStatus.NoMatch, b.Status));
+        Assert.All(bank, b => Assert.True(b.IsMatched)); // locked, but not a match — see above
+        Assert.Empty(result.MatchGroups); // no genuine match to display as a group
+    }
+
+    [Fact]
     public async Task RunAsync_NoTransactionIsEverDoubleCounted()
     {
         // Property check across a larger synthetic set: every R365 row
