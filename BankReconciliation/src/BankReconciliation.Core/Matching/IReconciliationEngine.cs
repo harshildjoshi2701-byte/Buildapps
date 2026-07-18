@@ -12,10 +12,10 @@ namespace BankReconciliation.Core.Matching;
 public interface IReconciliationEngine
 {
     /// <summary>
-    /// Runs all three matching passes plus duplicate detection over the given
-    /// transactions IN PLACE (the same <see cref="TransactionRecord"/>
-    /// instances passed in are mutated with their final Status/Comment/etc.)
-    /// and returns the aggregated result.
+    /// Runs the full six-pass pipeline (see <see cref="ReconciliationEngine"/>
+    /// remarks) over the given transactions IN PLACE (the same
+    /// <see cref="TransactionRecord"/> instances passed in are mutated with
+    /// their final Status/Comment/etc.) and returns the aggregated result.
     /// </summary>
     Task<ReconciliationResult> RunAsync(
         IReadOnlyList<TransactionRecord> bankTransactions,

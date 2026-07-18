@@ -4,16 +4,17 @@ namespace BankReconciliation.Core.Matching;
 
 /// <summary>
 /// Flags "Possible Duplicate" transactions: rows that remain unmatched after
-/// all three matching passes AND share an identical (Date, Amount) with at
-/// least one other unmatched row on the SAME side.
+/// every earlier matching pass (see <see cref="ReconciliationEngine"/>) AND
+/// share an identical (Date, Amount) with at least one other unmatched row
+/// on the SAME side.
 ///
 /// Rationale for running this only against the still-unmatched pool: two
 /// genuinely duplicate bank deposits that each have their own corresponding
-/// R365 posting are not a problem — they get matched normally (Pass 1 picks
-/// the FIFO-oldest for the first one, then the second candidate satisfies
-/// the second one). It's only when a same-date/same-amount pair is left over
-/// with no explanation that it's worth flagging as a possible bookkeeping
-/// duplicate rather than a plain "No Match".
+/// R365 posting are not a problem — they get matched normally (the
+/// exact-match pass picks the FIFO-oldest for the first one, then the second
+/// candidate satisfies the second one). It's only when a same-date/same-amount
+/// pair is left over with no explanation that it's worth flagging as a
+/// possible bookkeeping duplicate rather than a plain "No Match".
 /// </summary>
 public static class DuplicateDetector
 {
