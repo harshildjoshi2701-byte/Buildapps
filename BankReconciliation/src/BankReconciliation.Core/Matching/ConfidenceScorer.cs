@@ -28,7 +28,9 @@ public static class ConfidenceScorer
     /// from a perfect 100:
     ///   - Date penalty: up to 5 points, scaled by how close the group's
     ///     WORST (largest) member date-difference is to the allowed maximum.
-    ///   - Count penalty: up to 8 points, logarithmic in transaction count —
+    ///   - Count penalty: up to 8 points, logarithmic in transaction count,
+    ///     anchored at 2 (the smallest possible combination) so a clean
+    ///     2-item combination scores identically to a 1-to-1 exact match —
     ///     a 40-transaction combination is intrinsically a little less
     ///     certain than a 2-transaction one, but the penalty must not keep
     ///     growing unbounded for the legitimate 100+ transaction case the
@@ -47,7 +49,7 @@ public static class ConfidenceScorer
         if (maxAllowedDays > 0)
             score -= maxDateDiffDays / (double)maxAllowedDays * 5.0;
 
-        var countPenalty = Math.Log2(Math.Max(transactionCount, 1)) * 1.5;
+        var countPenalty = Math.Log2(Math.Max(transactionCount, 2) / 2.0) * 1.5;
         score -= Math.Min(8.0, countPenalty);
 
         if (ambiguous)

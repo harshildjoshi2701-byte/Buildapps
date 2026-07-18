@@ -83,7 +83,7 @@ public sealed class ReconciliationEngine : IReconciliationEngine
         // Shared across the named-rule stage and the general combination
         // sweep so the final counts/log reflect combination-style matching
         // as a whole, regardless of which of the two stages found it.
-        var comboStats = new SearchStats();
+        var comboStats = new CombinationMatcher.SearchStats();
 
         // ---- Pass 1: custom matching rules (named, curated, unconditional) ----
         ReportSimple(progress, 1, 5, "Custom matching rules", 0, allBank.Count, overallSw.Elapsed);
