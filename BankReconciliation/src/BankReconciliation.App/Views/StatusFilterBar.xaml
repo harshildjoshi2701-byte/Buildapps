@@ -16,5 +16,9 @@
                 Command="{Binding ApplyStatusFilterCommand}" CommandParameter="No Match"/>
         <TextBlock Text="{Binding StatusFilter, StringFormat='  Showing: {0}'}" VerticalAlignment="Center"
                    Style="{StaticResource MutedTextStyle}" Margin="14,0,0,0"/>
+        <TextBlock Text="Search:" VerticalAlignment="Center" Style="{StaticResource MutedTextStyle}" Margin="20,0,8,0"/>
+        <TextBox Width="220" VerticalAlignment="Center" Padding="6,3"
+                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                 ToolTip="Search description, comment, amount, date, or Grouping value"/>
     </StackPanel>
 </UserControl>

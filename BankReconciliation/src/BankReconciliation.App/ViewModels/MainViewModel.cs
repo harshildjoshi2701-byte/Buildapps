@@ -157,9 +157,22 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private string _searchText = string.Empty;
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetField(ref _searchText, value))
+            {
+                RefreshFilteredViews();
+            }
+        }
+    }
+
     /// <summary>Rebuilds BankRowsView/R365RowsView from BankRows/R365Rows using
-    /// the current StatusFilter. Called whenever either the underlying rows or
-    /// the filter changes.</summary>
+    /// the current StatusFilter and SearchText. Called whenever either the
+    /// underlying rows or either filter changes.</summary>
     private void RefreshFilteredViews()
     {
         BankRowsView.Clear();
@@ -171,6 +184,8 @@ public sealed class MainViewModel : ViewModelBase
 
     private bool RowFilter(TransactionRowViewModel row)
     {
+        if (!string.IsNullOrWhiteSpace(SearchText) && !MatchesSearch(row, SearchText)) return false;
+
         if (StatusFilter == "All") return true;
         return StatusFilter switch
         {
@@ -180,6 +195,19 @@ public sealed class MainViewModel : ViewModelBase
             _ => true,
         };
     }
+
+    /// <summary>Plain substring search (case-insensitive) across every field
+    /// a user would plausibly recognize a transaction by — deliberately not
+    /// restricted to Description, since the Grouping value or the engine's
+    /// own comment ("Manual Review — Grouping ...") is often exactly what
+    /// someone is trying to find at review time.</summary>
+    private static bool MatchesSearch(TransactionRowViewModel row, string search) =>
+        row.Description.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        row.Comment.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        row.GroupingKey.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        row.AmountDisplay.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        row.DateDisplay.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+        row.RowNumber.ToString(System.Globalization.CultureInfo.InvariantCulture).Contains(search, StringComparison.OrdinalIgnoreCase);
 
     public bool IsDarkMode
     {

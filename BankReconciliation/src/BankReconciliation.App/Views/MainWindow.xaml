@@ -8,7 +8,14 @@
         mc:Ignorable="d"
         Title="Bank Reconciliation Tool" Height="820" Width="1320" MinHeight="620" MinWidth="1000"
         Background="{DynamicResource WindowBackgroundBrush}"
-        FontFamily="Segoe UI">
+        FontFamily="Segoe UI"
+        AllowDrop="True" DragEnter="Window_DragEnter" Drop="Window_Drop">
+
+    <Window.InputBindings>
+        <KeyBinding Key="O" Modifiers="Control" Command="{Binding BrowseCommand}"/>
+        <KeyBinding Key="F5" Command="{Binding StartCommand}"/>
+        <KeyBinding Key="Escape" Command="{Binding CancelCommand}"/>
+    </Window.InputBindings>
 
     <Window.Resources>
         <conv:MatchStatusToBrushConverter x:Key="StatusToBrush"/>
@@ -67,7 +74,7 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Background="#12FFFFFF" CornerRadius="6" Padding="10,8" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SelectedFilePath, TargetNullValue='No file selected — click Browse to choose a workbook'}"
+                        <TextBlock Text="{Binding SelectedFilePath, TargetNullValue='No file selected — click Browse, or drag & drop a workbook anywhere in this window'}"
                                    Foreground="{DynamicResource HeaderForegroundBrush}" TextTrimming="CharacterEllipsis"/>
                     </Border>
 
