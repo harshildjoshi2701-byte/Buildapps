@@ -1,0 +1,50 @@
+name: Build Windows App
+
+# Builds the actual .exe on a real Windows runner, since WPF cannot be
+# compiled or verified from the Linux environment this project is otherwise
+# developed in. This is the first genuine Windows compile of the App layer.
+
+on:
+  push:
+    branches:
+      - claude/bank-reconciliation-app-klymv5
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore BankReconciliation/BankReconciliation.sln
+
+      - name: Build (Release, all 3 projects including the WPF App)
+        run: dotnet build BankReconciliation/BankReconciliation.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test BankReconciliation/src/BankReconciliation.Core.Tests/BankReconciliation.Core.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Publish self-contained single-file exe
+        run: >
+          dotnet publish BankReconciliation/src/BankReconciliation.App/BankReconciliation.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o dist/app
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BankReconciliation-exe
+          path: dist/app/
+          retention-days: 30
