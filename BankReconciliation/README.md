@@ -80,12 +80,12 @@ Launch `BankReconciliation.exe` directly, or install via `BankReconciliationSetu
 
 ## Using the app
 
-1. **Browse Excel File** — pick the workbook to reconcile (or pick one from **Recent Files**).
-2. **Start Reconciliation** — runs on a background thread with a progress bar, current-pass status, elapsed time, and estimated remaining time. **Cancel** stops a run in progress.
-3. When it finishes, the **Summary Dashboard** tab shows the KPIs (totals, matched/unmatched counts, match percentage, processing time, etc.), and the **Bank Transactions** / **R365 Transactions** tabs show every row with its status pill, confidence score, and comment — filterable by All / Matched / Manual Review / No Match.
-4. **Open Output File** opens the reconciled workbook; **Show in Folder** reveals it in Explorer; **View Log** opens the run's log file.
-5. **Settings** (gear icon) exposes every matching-rule and performance knob — see [Settings reference](#settings-reference).
-6. The moon/sun icon toggles Dark Mode.
+1. **Browse Excel File** — pick the workbook to reconcile, pick one from **Recent Files**, or just **drag and drop** a `.xlsx` anywhere onto the window.
+2. **Start Reconciliation** (`F5`) — runs on a background thread with a progress bar, current-pass status, elapsed time, and estimated remaining time. **Cancel** (`Escape`) stops a run in progress.
+3. When it finishes, results are sorted **matched first, unmatched last** so the rows needing attention are easy to find. The **Summary Dashboard** tab shows the KPIs (totals, matched/unmatched counts, match percentage, processing time, etc.), and the **Bank Transactions** / **R365 Transactions** tabs show every row with its Grouping value, status pill, confidence score, and comment — filterable by All / Matched / Manual Review / No Match, and by free-text **Search** across description, comment, Grouping value, amount, date, and row number.
+4. **Open Output File** opens the reconciled workbook; **Export Needs-Review Report** writes a CSV of just the No Match / Manual Review / Possible Duplicate rows, for sharing without the full workbook; **Show in Folder** reveals the output in Explorer; **View Log** opens the run's log file.
+5. **Settings** (gear icon) exposes every matching-rule, worksheet/column-mapping, and performance knob — see [Settings reference](#settings-reference).
+6. The moon/sun icon toggles Dark Mode. `Ctrl+O` opens the browse dialog from anywhere.
 
 ## Matching algorithm
 
@@ -190,6 +190,8 @@ The app never overwrites or modifies the original workbook. It writes a new file
 
 Each run also writes a log file (human-readable `.log` plus a machine-readable `.json`) recording date/time, rows processed, rows matched, errors, warnings, combination details, and total processing time. **View Log** opens the human-readable version.
 
+**Export Needs-Review Report** (footer button, available once a run has results) writes `<OriginalFileName>_NeedsReview.csv` next to the original — every No Match, Manual Review, and Possible Duplicate row from both sheets (Side, Row, Date, Amount, Grouping, Description, Status, Comment), same auto-increment-on-collision naming. Meant for sharing just the follow-up items without sending the full workbook. Plain CSV, not another `.xlsx`.
+
 ## Architecture
 
 ```
@@ -199,7 +201,7 @@ BankReconciliation.sln
 │   ├── Matching/                        GroupingMatcher (new), CombinationMatcher,
 │   │                                    OneToOneMatcher, confidence scoring, duplicate detection.
 │   └── Services/                        Excel I/O (ClosedXML) across two worksheets, logging,
-│                                        settings persistence.
+│                                        settings persistence, ReportExporter (CSV, new).
 ├── src/BankReconciliation.Core.Tests/   xUnit tests for the matching engine.
 └── src/BankReconciliation.App/          WPF (net8.0-windows) desktop UI, MVVM.
     ├── ViewModels/
