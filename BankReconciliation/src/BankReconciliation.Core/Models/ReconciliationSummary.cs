@@ -19,6 +19,7 @@ public sealed class ReconciliationSummary
 
     public int OneToOneMatches { get; set; }
     public int CombinationMatches { get; set; }
+    public int GroupingMatches { get; set; }
     public int ManualReviewCount { get; set; }
     public int PossibleDuplicateBankCount { get; set; }
     public int PossibleDuplicateR365Count { get; set; }

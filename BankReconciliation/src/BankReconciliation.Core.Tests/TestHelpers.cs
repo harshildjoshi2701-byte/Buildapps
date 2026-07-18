@@ -8,16 +8,17 @@ internal static class TestHelpers
 {
     private static readonly DateTime BaseDate = new(2026, 6, 1);
 
-    public static TransactionRecord Bank(int row, int dayOffset, decimal amountDollars, string? reference = null) => new()
+    public static TransactionRecord Bank(int row, int dayOffset, decimal amountDollars, string? reference = null, string groupingKey = "") => new()
     {
         RowNumber = row,
         Side = TransactionSide.Bank,
         Date = BaseDate.AddDays(dayOffset),
         AmountCents = (long)Math.Round(amountDollars * 100m),
         Reference = reference ?? string.Empty,
+        GroupingKey = groupingKey,
     };
 
-    public static TransactionRecord R365(int row, int dayOffset, decimal amountDollars, bool grouped = true, string? reference = null) => new()
+    public static TransactionRecord R365(int row, int dayOffset, decimal amountDollars, bool grouped = true, string? reference = null, string groupingKey = "") => new()
     {
         RowNumber = row,
         Side = TransactionSide.R365,
@@ -25,6 +26,7 @@ internal static class TestHelpers
         AmountCents = (long)Math.Round(amountDollars * 100m),
         Reference = reference ?? (grouped ? "R365-1000001" : "Online"),
         IsGroupedPosting = grouped,
+        GroupingKey = groupingKey,
     };
 
     public static ReconciliationSettings DefaultSettings() => new()

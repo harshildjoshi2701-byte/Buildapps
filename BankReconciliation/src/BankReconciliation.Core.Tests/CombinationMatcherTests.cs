@@ -175,9 +175,9 @@ public class CombinationMatcherTests
     public void RunSpecialComboRules_MatchesAcrossWideDateGapIgnoringNormalWindow()
     {
         // The default named rule (bank column 8 contains "Sysco" <-> R365
-        // column 16 contains "Online") must group rows even when they are
-        // much further apart than MaxDateDifferenceDays allows, since named
-        // rules are not subject to the normal date window at all.
+        // Grouping column 2 also contains "Sysco") must group rows even when
+        // they are much further apart than MaxDateDifferenceDays allows,
+        // since named rules are not subject to the normal date window at all.
         var bank = new[]
         {
             new TransactionRecord
@@ -192,8 +192,8 @@ public class CombinationMatcherTests
         var r365 = new[]
         {
             // 30+ days before the bank date — would fail the normal window.
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
         };
         var settings = DefaultSettings();
         settings.MaxDateDifferenceDays = 6; // far narrower than the gap above
@@ -212,7 +212,7 @@ public class CombinationMatcherTests
     public void RunSpecialComboRules_DoesNotFireWithoutBankKeyword()
     {
         // A bank row whose column 8 does NOT contain "Sysco" must not be
-        // grouped with "Online" R365 rows even if the amounts would sum
+        // grouped with Sysco-tagged R365 rows even if the amounts would sum
         // correctly — the named rule is keyword-gated on both sides.
         var bank = new[]
         {
@@ -227,8 +227,8 @@ public class CombinationMatcherTests
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -10000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -8000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
         };
         var settings = DefaultSettings();
         settings.MaxDateDifferenceDays = 6;
@@ -243,7 +243,7 @@ public class CombinationMatcherTests
     public void RunSpecialComboRules_MatchesEvenWhenAmountsDontSumAtAll()
     {
         // The rule performs no arithmetic whatsoever: only $110.00 of
-        // "Online" R365 rows exist against a $180.00 Sysco charge, and
+        // Sysco-tagged R365 rows exist against a $180.00 Sysco charge, and
         // nothing sums to anything. It must still match everything it can
         // find rather than leaving the row as No Match — any gap is left
         // visible via the AB formula, not by refusing to match.
@@ -260,8 +260,8 @@ public class CombinationMatcherTests
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -6000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -6000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
         };
         var settings = DefaultSettings();
         var stats = new CombinationMatcher.SearchStats();
@@ -279,12 +279,12 @@ public class CombinationMatcherTests
     public void RunSpecialComboRules_GroupsEveryEligibleRowTogetherRegardlessOfSignOrDate()
     {
         // The rule is a pure keyword filter, not a search: EVERY still-
-        // unmatched Sysco bank row and EVERY still-unmatched Online R365 row
-        // are grouped into one single match together, no matter how
+        // unmatched Sysco bank row and EVERY still-unmatched Sysco-tagged
+        // R365 row are grouped into one single match together, no matter how
         // mismatched their amounts, signs, or dates are relative to each
         // other. Two unrelated Sysco entries (opposite signs, unrelated
         // magnitudes, six months apart) end up sharing one Match ID with two
-        // equally unrelated Online entries.
+        // equally unrelated Sysco-tagged entries.
         var bank = new[]
         {
             new TransactionRecord
@@ -306,9 +306,9 @@ public class CombinationMatcherTests
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -5000, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
             // opposite sign, unrelated amount, far-off date
-            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 12, 18), AmountCents = 99999, RawColumns = new Dictionary<int, string> { [16] = "Online" } },
+            new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 12, 18), AmountCents = 99999, RawColumns = new Dictionary<int, string> { [2] = "Sysco" } },
         };
         var settings = DefaultSettings();
         var stats = new CombinationMatcher.SearchStats();
@@ -327,8 +327,8 @@ public class CombinationMatcherTests
     [Fact]
     public void RunSpecialComboRules_DoesNotFireWhenOnlyOneSideHasEligibleRows()
     {
-        // A Sysco bank row with zero "Online" R365 rows anywhere in the file
-        // must be left alone (falls through to later passes / No Match)
+        // A Sysco bank row with zero Sysco-tagged R365 rows anywhere in the
+        // file must be left alone (falls through to later passes / No Match)
         // rather than the rule inventing a match with nothing on the other
         // side.
         var bank = new[]
@@ -344,7 +344,7 @@ public class CombinationMatcherTests
         };
         var r365 = new[]
         {
-            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -18000, RawColumns = new Dictionary<int, string> { [16] = "Check #4471" } },
+            new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -18000, RawColumns = new Dictionary<int, string> { [2] = "Check #4471" } },
         };
         var settings = DefaultSettings();
         var stats = new CombinationMatcher.SearchStats();

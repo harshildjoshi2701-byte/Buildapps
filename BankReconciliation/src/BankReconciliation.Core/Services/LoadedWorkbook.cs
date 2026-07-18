@@ -12,7 +12,8 @@ namespace BankReconciliation.Core.Services;
 public sealed class LoadedWorkbook : IDisposable
 {
     public required XLWorkbook Workbook { get; init; }
-    public required IXLWorksheet Worksheet { get; init; }
+    public required IXLWorksheet BankWorksheet { get; init; }
+    public required IXLWorksheet R365Worksheet { get; init; }
     public required List<TransactionRecord> BankTransactions { get; init; }
     public required List<TransactionRecord> R365Transactions { get; init; }
     public required string SourceFilePath { get; init; }

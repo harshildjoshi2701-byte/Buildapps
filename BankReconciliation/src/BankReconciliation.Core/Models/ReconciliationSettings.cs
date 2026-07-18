@@ -37,14 +37,23 @@ public sealed class ReconciliationSettings
     /// are not tagged, so this is off by default.</summary>
     public bool RequireGroupKeywordForCombinations { get; set; } = false;
 
-    /// <summary>Named, curated keyword-grouping rules (e.g. bank rows
-    /// described "Sysco" grouped together with R365 rows referenced
-    /// "Online"), unconditional and unrestricted by the normal date window.
-    /// See <see cref="SpecialComboRule"/> and
-    /// <see cref="Matching.CombinationMatcher"/> remarks.</summary>
+    /// <summary>Named, curated keyword-grouping rules, unconditional and
+    /// unrestricted by the normal date window. See <see cref="SpecialComboRule"/>
+    /// and <see cref="Matching.CombinationMatcher"/> remarks.
+    ///
+    /// The shipped default rule now targets the new Grouping column on BOTH
+    /// sides (column 8 / column 2 — see <see cref="ColumnMapping.BankGroupingColumn"/>
+    /// and <see cref="ColumnMapping.R365GroupingColumn"/>), checking for the
+    /// literal value "Sysco" on each: the real workbook's Grouping column was
+    /// found to hold "Sysco" as a keyword tag that never sum-matches (unlike
+    /// every other Grouping value, which is a numeric linking ID that DOES
+    /// sum-match). Keeping Sysco on this named-rule mechanism rather than
+    /// folding it into <see cref="Matching.GroupingMatcher"/>'s bucket-and-sum
+    /// logic is deliberate — see that class's remarks for why running named
+    /// rules first makes the split correct with no special-casing required.</summary>
     public List<SpecialComboRule> SpecialComboRules { get; set; } = new()
     {
-        new SpecialComboRule { BankColumn = 8, BankKeyword = "Sysco", R365Column = 16, R365Keyword = "Online" },
+        new SpecialComboRule { BankColumn = 8, BankKeyword = "Sysco", R365Column = 2, R365Keyword = "Sysco" },
     };
 
     /// <summary>Confidence score assigned to every match found by a

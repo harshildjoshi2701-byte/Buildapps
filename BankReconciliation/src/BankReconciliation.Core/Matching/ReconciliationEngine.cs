@@ -8,11 +8,13 @@ namespace BankReconciliation.Core.Matching;
 ///
 ///   Pass 1 — named/curated custom matching rules, unconditional keyword
 ///            grouping, no amount or date check                  (CombinationMatcher.RunSpecialComboRules)
-///   Pass 2 — one-to-one, exact amount, exact date                (OneToOneMatcher)
-///   Pass 3 — one-to-one, exact amount, date within window         (OneToOneMatcher)
-///   Pass 4 — general combination matching, date-windowed subset-sum
+///   Pass 2 — Grouping-column bucket match: rows sharing a Grouping value
+///            are summed per side and compared as one unit             (GroupingMatcher)
+///   Pass 3 — one-to-one, exact amount, exact date                (OneToOneMatcher)
+///   Pass 4 — one-to-one, exact amount, date within window         (OneToOneMatcher)
+///   Pass 5 — general combination matching, date-windowed subset-sum
 ///            (CombinationMatcher.ProcessAll)
-///   Pass 5 — duplicate detection + finalize every still-Unmatched row
+///   Pass 6 — duplicate detection + finalize every still-Unmatched row
 ///            to PossibleDuplicate or NoMatch                    (DuplicateDetector)
 ///
 /// Custom matching rules run FIRST, ahead of even the exact-match pass —
@@ -20,10 +22,16 @@ namespace BankReconciliation.Core.Matching;
 /// mentioning Sysco always belong with R365 rows mentioning Online"), so
 /// they get first claim on the transaction pool. Without this, a handful of
 /// rows a named rule would otherwise group together can instead get peeled
-/// off individually by Pass 2/3's exact-amount matching whenever a
+/// off individually by Pass 3/4's exact-amount matching whenever a
 /// coincidental amount+date collision exists, which fragments what should
 /// have been one clean, fully-explained group into a mix of small exact
 /// matches plus a named-rule group with an unexplained residual gap.
+///
+/// Grouping-column matching runs second, immediately after named rules and
+/// still ahead of every amount/date-based pass — see
+/// <see cref="GroupingMatcher"/>'s remarks for why that specific ordering
+/// (not "Grouping first, named rules second") is what makes the Sysco/
+/// Grouping split correct without any special-casing.
 ///
 /// LOCKING INVARIANT: once a <see cref="TransactionRecord"/> has
 /// <c>IsMatched == true</c> (or a terminal Status other than Unmatched), no
@@ -86,31 +94,38 @@ public sealed class ReconciliationEngine : IReconciliationEngine
         var comboStats = new CombinationMatcher.SearchStats();
 
         // ---- Pass 1: custom matching rules (named, curated, unconditional) ----
-        ReportSimple(progress, 1, 5, "Custom matching rules", 0, allBank.Count, overallSw.Elapsed);
+        ReportSimple(progress, 1, 6, "Custom matching rules", 0, allBank.Count, overallSw.Elapsed);
         CombinationMatcher.RunSpecialComboRules(allBank, allR365, settings, groupIds, comboStats, cancellationToken);
         log.Info($"Pass 1 (custom matching rules): {comboStats.MatchedCount:N0} rows grouped by named rules so far.");
-        ReportSimple(progress, 1, 5, "Custom matching rules", allBank.Count, allBank.Count, overallSw.Elapsed);
+        ReportSimple(progress, 1, 6, "Custom matching rules", allBank.Count, allBank.Count, overallSw.Elapsed);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // ---- Pass 2: exact date + exact amount, one-to-one ----
-        ReportSimple(progress, 2, 5, "Exact matching", 0, allBank.Count, overallSw.Elapsed);
+        // ---- Pass 2: Grouping-column bucket match ----
+        ReportSimple(progress, 2, 6, "Grouping column matching", 0, allBank.Count, overallSw.Elapsed);
+        var groupingMatchCount = GroupingMatcher.MatchAll(allBank, allR365, settings, groupIds);
+        log.Info($"Pass 2 (Grouping column): {groupingMatchCount:N0} groups tied out and matched.");
+        ReportSimple(progress, 2, 6, "Grouping column matching", allBank.Count, allBank.Count, overallSw.Elapsed);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---- Pass 3: exact date + exact amount, one-to-one ----
+        ReportSimple(progress, 3, 6, "Exact matching", 0, allBank.Count, overallSw.Elapsed);
         var exactMatchCount = OneToOneMatcher.MatchExact(allBank, allR365, groupIds);
-        log.Info($"Pass 2 (exact date + amount): {exactMatchCount:N0} one-to-one matches.");
-        ReportSimple(progress, 2, 5, "Exact matching", allBank.Count, allBank.Count, overallSw.Elapsed);
+        log.Info($"Pass 3 (exact date + amount): {exactMatchCount:N0} one-to-one matches.");
+        ReportSimple(progress, 3, 6, "Exact matching", allBank.Count, allBank.Count, overallSw.Elapsed);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // ---- Pass 3: date-tolerant, one-to-one ----
-        ReportSimple(progress, 3, 5, "Date-tolerant matching", 0, allBank.Count, overallSw.Elapsed);
+        // ---- Pass 4: date-tolerant, one-to-one ----
+        ReportSimple(progress, 4, 6, "Date-tolerant matching", 0, allBank.Count, overallSw.Elapsed);
         var dateTolerantMatchCount = OneToOneMatcher.MatchDateTolerant(allBank, allR365, settings.MaxDateDifferenceDays, groupIds);
-        log.Info($"Pass 3 (date-tolerant, 0-{settings.MaxDateDifferenceDays} days): {dateTolerantMatchCount:N0} one-to-one matches.");
-        ReportSimple(progress, 3, 5, "Date-tolerant matching", allBank.Count, allBank.Count, overallSw.Elapsed);
+        log.Info($"Pass 4 (date-tolerant, 0-{settings.MaxDateDifferenceDays} days): {dateTolerantMatchCount:N0} one-to-one matches.");
+        ReportSimple(progress, 4, 6, "Date-tolerant matching", allBank.Count, allBank.Count, overallSw.Elapsed);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // ---- Pass 4: general combination matching (date-windowed subset-sum) ----
+        // ---- Pass 5: general combination matching (date-windowed subset-sum) ----
         var generalSweepSw = Stopwatch.StartNew();
         CombinationMatcher.ProcessAll(allBank, allR365, settings, groupIds, progress, cancellationToken, comboStats);
         log.Info(
-            $"Pass 4 (combination/subset-sum): {comboStats.MatchedCount:N0} combination matches total " +
+            $"Pass 5 (combination/subset-sum): {comboStats.MatchedCount:N0} combination matches total " +
             $"(named rules + general sweep), {comboStats.ManualReviewCount:N0} flagged for manual review, " +
             $"general sweep took {generalSweepSw.Elapsed.TotalSeconds:F2}s " +
             $"(two-item={comboStats.TwoSumHits:N0}, three-item={comboStats.ThreeSumHits:N0}, " +
@@ -122,14 +137,14 @@ public sealed class ReconciliationEngine : IReconciliationEngine
             log.Warn($"{comboStats.TruncatedPools:N0} transactions had more candidate R365 rows than MaxCombinationPoolSize ({settings.MaxCombinationPoolSize}); only the closest-dated candidates were searched.");
         cancellationToken.ThrowIfCancellationRequested();
 
-        // ---- Pass 5: duplicate detection + finalize remaining rows ----
-        ReportSimple(progress, 5, 5, "Duplicate detection & finalizing", 0, allBank.Count + allR365.Count, overallSw.Elapsed);
+        // ---- Pass 6: duplicate detection + finalize remaining rows ----
+        ReportSimple(progress, 6, 6, "Duplicate detection & finalizing", 0, allBank.Count + allR365.Count, overallSw.Elapsed);
         DuplicateDetector.FinalizeUnmatched(allBank);
         DuplicateDetector.FinalizeUnmatched(allR365);
         var dupBank = allBank.Count(b => b.Status == MatchStatus.PossibleDuplicate);
         var dupR365 = allR365.Count(r => r.Status == MatchStatus.PossibleDuplicate);
         log.Info($"Possible duplicates flagged: {dupBank:N0} bank, {dupR365:N0} R365.");
-        ReportSimple(progress, 5, 5, "Duplicate detection & finalizing", allBank.Count + allR365.Count, allBank.Count + allR365.Count, overallSw.Elapsed);
+        ReportSimple(progress, 6, 6, "Duplicate detection & finalizing", allBank.Count + allR365.Count, allBank.Count + allR365.Count, overallSw.Elapsed);
 
         // ---- Build match groups from final state ----
         var matchGroups = BuildMatchGroups(allBank, allR365);
@@ -147,6 +162,7 @@ public sealed class ReconciliationEngine : IReconciliationEngine
             UnmatchedR365Transactions = allR365.Count(r => r.Status == MatchStatus.NoMatch),
             OneToOneMatches = exactMatchCount + dateTolerantMatchCount,
             CombinationMatches = (int)comboStats.MatchedCount,
+            GroupingMatches = groupingMatchCount,
             ManualReviewCount = allBank.Count(b => b.Status == MatchStatus.ManualReview) + allR365.Count(r => r.Status == MatchStatus.ManualReview),
             PossibleDuplicateBankCount = dupBank,
             PossibleDuplicateR365Count = dupR365,
@@ -179,7 +195,21 @@ public sealed class ReconciliationEngine : IReconciliationEngine
     /// assigned atomically with locking at match time. Building the final
     /// group list is therefore a simple, unambiguous GroupBy: no separate
     /// lookup heuristic is needed to figure out which R365 row(s) belong to
-    /// which bank row.</summary>
+    /// which bank row.
+    ///
+    /// KNOWN GAP: this method is anchored on Bank transactions — it produces
+    /// one <see cref="MatchGroup"/> per matched Bank row, with every R365 row
+    /// sharing its GroupId attached as a member. Two cases don't fit that
+    /// shape cleanly and are NOT fully represented here (though both are
+    /// still correct in the actual Bank/R365 row data and the Excel output,
+    /// which write per-row, not via this list): a named rule or a one-sided
+    /// <see cref="GroupingMatcher"/> bucket with MULTIPLE Bank rows produces
+    /// one MatchGroup per Bank row, each duplicating the same R365 members;
+    /// an R365-only <see cref="GroupingMatcher"/> bucket (no Bank counterpart
+    /// at all) produces NO MatchGroup, since there is no Bank row to anchor
+    /// on. A UI that needs an accurate one-sided-group view should read
+    /// directly from the R365/Bank transaction lists' GroupId, not this
+    /// method, until/unless MatchGroup is generalized to N-vs-M.</summary>
     private static List<MatchGroup> BuildMatchGroups(IReadOnlyList<TransactionRecord> bank, IReadOnlyList<TransactionRecord> r365)
     {
         var r365ByGroup = r365.Where(r => r.GroupId >= 0).GroupBy(r => r.GroupId).ToDictionary(g => g.Key, g => (IReadOnlyList<TransactionRecord>)g.ToList());

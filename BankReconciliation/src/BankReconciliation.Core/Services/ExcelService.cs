@@ -16,13 +16,17 @@ namespace BankReconciliation.Core.Services;
 /// class never creates a new workbook — it opens the original, mutates only
 /// the specific cells the reconciliation result requires, and saves that same
 /// object graph to a new path.
+///
+/// AS OF THIS VERSION: Bank and R365 transactions live on two SEPARATE
+/// worksheets (<see cref="ColumnMapping.BankWorksheetName"/> /
+/// <see cref="ColumnMapping.R365WorksheetName"/>) rather than side by side on
+/// one sheet — every method below reads/writes each sheet independently.
 /// </summary>
 public sealed class ExcelService : IExcelService
 {
     /// <summary>How many columns (1..N) are captured into every row's
     /// <see cref="TransactionRecord.RawColumns"/>. Wide enough to cover any
-    /// reasonable custom-matching-rule column choice on either side of the
-    /// sheet (the shipped template only uses columns through AB/28) without
+    /// reasonable custom-matching-rule column choice on either sheet without
     /// needing to know the mapping's exact column set in advance.</summary>
     private const int RawColumnCaptureWidth = 40;
 
@@ -32,23 +36,45 @@ public sealed class ExcelService : IExcelService
             throw new FileNotFoundException($"Workbook not found: {filePath}", filePath);
 
         var workbook = new XLWorkbook(filePath);
-        var worksheet = string.IsNullOrWhiteSpace(mapping.WorksheetName)
-            ? workbook.Worksheets.First()
-            : workbook.Worksheet(mapping.WorksheetName);
+        var bankSheet = ResolveWorksheet(workbook, mapping.BankWorksheetName, "Bank");
+        var r365Sheet = ResolveWorksheet(workbook, mapping.R365WorksheetName, "R365");
 
-        var lastUsedRow = worksheet.LastRowUsed()?.RowNumber() ?? mapping.BankDataStartRow;
+        var bankLastRow = bankSheet.LastRowUsed()?.RowNumber() ?? mapping.BankDataStartRow;
+        var r365LastRow = r365Sheet.LastRowUsed()?.RowNumber() ?? mapping.R365DataStartRow;
 
-        var bankTransactions = ReadBankTransactions(worksheet, mapping, lastUsedRow, ignoreAlreadyReconciledRows);
-        var r365Transactions = ReadR365Transactions(worksheet, mapping, lastUsedRow, ignoreAlreadyReconciledRows);
+        var bankTransactions = ReadBankTransactions(bankSheet, mapping, bankLastRow, ignoreAlreadyReconciledRows);
+        var r365Transactions = ReadR365Transactions(r365Sheet, mapping, r365LastRow, ignoreAlreadyReconciledRows);
 
         return new LoadedWorkbook
         {
             Workbook = workbook,
-            Worksheet = worksheet,
+            BankWorksheet = bankSheet,
+            R365Worksheet = r365Sheet,
             BankTransactions = bankTransactions,
             R365Transactions = r365Transactions,
             SourceFilePath = filePath,
         };
+    }
+
+    /// <summary>Worksheet name lookup is case-insensitive and falls back to
+    /// the first worksheet whose name CONTAINS the configured name, since
+    /// real exports sometimes carry a trailing space or a date suffix. Throws
+    /// a clear, actionable error rather than a ClosedXML KeyNotFoundException
+    /// if nothing matches — this is exactly the kind of mismatch a stale
+    /// Settings.json (see <see cref="ColumnMapping"/> remarks) would cause.</summary>
+    private static IXLWorksheet ResolveWorksheet(XLWorkbook workbook, string configuredName, string sideLabel)
+    {
+        if (workbook.Worksheets.TryGetWorksheet(configuredName, out var exact))
+            return exact;
+
+        var looseMatch = workbook.Worksheets.FirstOrDefault(
+            ws => ws.Name.Contains(configuredName, StringComparison.OrdinalIgnoreCase));
+        if (looseMatch is not null) return looseMatch;
+
+        var available = string.Join(", ", workbook.Worksheets.Select(ws => $"\"{ws.Name}\""));
+        throw new InvalidOperationException(
+            $"Could not find a worksheet named \"{configuredName}\" for the {sideLabel} side. " +
+            $"Worksheets in this workbook: {available}. Fix the {sideLabel} worksheet name in Settings > Column Mapping.");
     }
 
     private static List<TransactionRecord> ReadBankTransactions(IXLWorksheet ws, ColumnMapping map, int lastUsedRow, bool ignoreAlreadyReconciled)
@@ -62,7 +88,7 @@ public sealed class ExcelService : IExcelService
             if (dateCell.IsEmpty() || dateCell.DataType != XLDataType.DateTime)
             {
                 consecutiveBlankRows++;
-                if (consecutiveBlankRows > 10) break; // genuinely past the end of the block
+                if (consecutiveBlankRows > 10) break; // genuinely past the end of the data
                 continue;
             }
             consecutiveBlankRows = 0;
@@ -72,6 +98,7 @@ public sealed class ExcelService : IExcelService
             var debit = ReadDoubleOrZero(ws.Cell(row, map.BankDebitColumn));
             var amountCents = MoneyMath.ToCents((decimal)credit) - MoneyMath.ToCents((decimal)debit);
             var description = ReadStringOrEmpty(ws.Cell(row, map.BankDescriptionColumn));
+            var groupingKey = ReadStringOrEmpty(ws.Cell(row, map.BankGroupingColumn)).Trim();
 
             var existingComment = ReadStringOrEmpty(ws.Cell(row, map.BankCommentColumn));
             var preLocked = ignoreAlreadyReconciled && !string.IsNullOrWhiteSpace(existingComment);
@@ -82,6 +109,7 @@ public sealed class ExcelService : IExcelService
                 Side = TransactionSide.Bank,
                 Date = date.Date,
                 AmountCents = amountCents,
+                GroupingKey = groupingKey,
                 DescriptionSnippet = Truncate(description, 80),
                 RawColumns = ReadRawColumns(ws, row),
                 IsMatched = preLocked,
@@ -115,6 +143,7 @@ public sealed class ExcelService : IExcelService
             var amountCents = MoneyMath.ToCents((decimal)amount);
             var reference = ReadStringOrEmpty(ws.Cell(row, map.R365ReferenceColumn));
             var description = ReadStringOrEmpty(ws.Cell(row, map.R365DescriptionColumn));
+            var groupingKey = ReadStringOrEmpty(ws.Cell(row, map.R365GroupingColumn)).Trim();
             var isGrouped = reference.Contains(map.GroupKeyword, StringComparison.OrdinalIgnoreCase);
 
             var existingComment = ReadStringOrEmpty(ws.Cell(row, map.R365CommentColumn));
@@ -128,6 +157,7 @@ public sealed class ExcelService : IExcelService
                 AmountCents = amountCents,
                 Reference = reference,
                 IsGroupedPosting = isGrouped,
+                GroupingKey = groupingKey,
                 DescriptionSnippet = Truncate(description, 80),
                 RawColumns = ReadRawColumns(ws, row),
                 IsMatched = preLocked,
@@ -151,19 +181,25 @@ public sealed class ExcelService : IExcelService
         bool tidyColumnsOnOutput,
         string outputFilePath)
     {
-        var ws = loaded.Worksheet;
+        var bankWs = loaded.BankWorksheet;
+        var r365Ws = loaded.R365Worksheet;
 
-        // Column letters used to build the K / AB helper formulas below.
+        // Column letters used to build the K / H helper formulas below. The
+        // R365-side difference formula references the Bank sheet by name
+        // (SUMIF across two different worksheets now that they're no longer
+        // the same sheet) — ClosedXML/Excel both support cross-sheet A1
+        // references as 'Sheet Name'!A1.
         var creditLetter = ColumnLetter(mapping.BankCreditColumn);
         var debitLetter = ColumnLetter(mapping.BankDebitColumn);
         var bankMatchIdLetter = ColumnLetter(mapping.BankConfidenceColumn);
         var r365MatchIdLetter = ColumnLetter(mapping.R365ConfidenceColumn);
         var bankDiffLetter = ColumnLetter(mapping.BankDiffColumn);
         var r365AmountLetter = ColumnLetter(mapping.R365AmountColumn);
+        var bankSheetRef = QuoteSheetName(bankWs.Name);
 
         foreach (var t in bankTransactions)
         {
-            WriteOne(ws, t, mapping.BankCommentColumn, mapping.BankConfidenceColumn,
+            WriteOne(bankWs, t, mapping.BankCommentColumn, mapping.BankConfidenceColumn,
                      mapping.BankFirstColumn, mapping.BankCommentColumn,
                      colors, writeConfidenceColumn, highlightFullRow, highlightOnlyUnmatched,
                      extra: !writeConfidenceColumn ? null : tt =>
@@ -172,49 +208,51 @@ public sealed class ExcelService : IExcelService
                          // with R365's signed Amount column convention. Written
                          // for every bank row (not just matched ones) — it's
                          // useful as a plain reference value and is what the
-                         // AB difference-check formula on the R365 side sums.
-                         ws.Cell(tt.RowNumber, mapping.BankDiffColumn).FormulaA1 =
+                         // R365-side difference-check formula sums.
+                         bankWs.Cell(tt.RowNumber, mapping.BankDiffColumn).FormulaA1 =
                              $"{creditLetter}{tt.RowNumber}-{debitLetter}{tt.RowNumber}";
                      });
         }
 
         foreach (var t in r365Transactions)
         {
-            WriteOne(ws, t, mapping.R365CommentColumn, mapping.R365ConfidenceColumn,
+            WriteOne(r365Ws, t, mapping.R365CommentColumn, mapping.R365ConfidenceColumn,
                      mapping.R365FirstColumn, mapping.R365CommentColumn,
                      colors, writeConfidenceColumn, highlightFullRow, highlightOnlyUnmatched,
                      extra: (!writeConfidenceColumn || t.GroupId < 0) ? null : tt =>
                      {
-                         // AB = (sum of K for every Bank row sharing this row's
-                         // Match ID) - (sum of Y for every R365 row sharing this
-                         // row's Match ID). Zero means the match group's bank
-                         // side and R365 side agree exactly; anything else
-                         // flags a discrepancy worth a second look. Only
-                         // written for matched rows (GroupId >= 0) — leaving it
-                         // blank for unmatched rows avoids SUMIF matching on a
-                         // blank criteria cell, which would sum unrelated rows.
-                         ws.Cell(tt.RowNumber, mapping.R365DiffColumn).FormulaA1 =
-                             $"SUMIF({bankMatchIdLetter}:{bankMatchIdLetter},{r365MatchIdLetter}{tt.RowNumber},{bankDiffLetter}:{bankDiffLetter})" +
+                         // Difference formula = (sum of K for every Bank row
+                         // sharing this row's Match ID) - (sum of Amount for
+                         // every R365 row sharing this row's Match ID). Zero
+                         // means the match group's two sides agree exactly;
+                         // anything else flags a discrepancy worth a second
+                         // look. Only written for matched rows (GroupId >= 0).
+                         r365Ws.Cell(tt.RowNumber, mapping.R365DiffColumn).FormulaA1 =
+                             $"SUMIF({bankSheetRef}!{bankMatchIdLetter}:{bankMatchIdLetter},{r365MatchIdLetter}{tt.RowNumber},{bankSheetRef}!{bankDiffLetter}:{bankDiffLetter})" +
                              $"-SUMIF({r365MatchIdLetter}:{r365MatchIdLetter},{r365MatchIdLetter}{tt.RowNumber},{r365AmountLetter}:{r365AmountLetter})";
                      });
         }
 
         // Header labels — only set if currently blank, so a re-run never
         // stomps on a user's own header customization.
-        SetHeaderIfBlank(ws, mapping.BankHeaderRow, mapping.BankCommentColumn, "Reconciliation Comment");
+        SetHeaderIfBlank(bankWs, mapping.BankHeaderRow, mapping.BankCommentColumn, "Reconciliation Comment");
         if (writeConfidenceColumn)
         {
-            SetHeaderIfBlank(ws, mapping.BankHeaderRow, mapping.BankConfidenceColumn, "Match ID");
-            SetHeaderIfBlank(ws, mapping.BankHeaderRow, mapping.BankDiffColumn, "Net (Credit-Debit)");
+            SetHeaderIfBlank(bankWs, mapping.BankHeaderRow, mapping.BankConfidenceColumn, "Match ID");
+            SetHeaderIfBlank(bankWs, mapping.BankHeaderRow, mapping.BankDiffColumn, "Net (Credit-Debit)");
         }
-        SetHeaderIfBlank(ws, mapping.R365HeaderRow, mapping.R365CommentColumn, "Reconciliation Comment");
+        SetHeaderIfBlank(r365Ws, mapping.R365HeaderRow, mapping.R365CommentColumn, "Reconciliation Comment");
         if (writeConfidenceColumn)
         {
-            SetHeaderIfBlank(ws, mapping.R365HeaderRow, mapping.R365ConfidenceColumn, "Match ID");
-            SetHeaderIfBlank(ws, mapping.R365HeaderRow, mapping.R365DiffColumn, "Match Difference");
+            SetHeaderIfBlank(r365Ws, mapping.R365HeaderRow, mapping.R365ConfidenceColumn, "Match ID");
+            SetHeaderIfBlank(r365Ws, mapping.R365HeaderRow, mapping.R365DiffColumn, "Match Difference");
         }
 
-        if (tidyColumnsOnOutput) TidyColumns(ws, mapping);
+        if (tidyColumnsOnOutput)
+        {
+            TidyWorksheet(bankWs, mapping.BankHeaderRow);
+            TidyWorksheet(r365Ws, mapping.R365HeaderRow);
+        }
 
         var directory = Path.GetDirectoryName(outputFilePath);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
@@ -233,9 +271,10 @@ public sealed class ExcelService : IExcelService
         ws.Cell(t.RowNumber, commentColumn).Value = t.Comment;
 
         // Match ID: the same number is written on the bank row and every R365
-        // row it matched with (1:1 or combination), so sorting either block by
-        // this column puts a match's transactions side by side. Left blank for
-        // anything not actually matched (GroupId is -1 for those).
+        // row it matched with (1:1 or combination/grouping), so sorting
+        // either sheet by this column puts a match's transactions side by
+        // side. Left blank for anything not actually matched (GroupId is -1
+        // for those).
         if (writeMatchId && t.GroupId >= 0)
         {
             var matchIdCell = ws.Cell(t.RowNumber, matchIdColumn);
@@ -285,19 +324,22 @@ public sealed class ExcelService : IExcelService
         if (cell.IsEmpty()) cell.Value = label;
     }
 
-    /// <summary>Hides the blank spacer columns between the end of the Bank
-    /// block and the start of the R365 block, and autofits every used
-    /// column's width based only on the header row (row 2) content.</summary>
-    private static void TidyColumns(IXLWorksheet ws, ColumnMapping mapping)
+    /// <summary>Autofits every used column's width on this sheet based on the
+    /// header row's content. No column-hiding step anymore — that existed to
+    /// hide the blank spacer between the Bank and R365 blocks when they
+    /// shared one worksheet; now that each side has its own sheet, there is
+    /// no spacer to hide.</summary>
+    private static void TidyWorksheet(IXLWorksheet ws, int headerRow)
     {
-        var bankLastColumn = new[] { mapping.BankCommentColumn, mapping.BankConfidenceColumn, mapping.BankDiffColumn }.Max();
-        var gapStart = bankLastColumn + 1;
-        var gapEnd = mapping.R365FirstColumn - 1;
-        if (gapEnd >= gapStart)
-            ws.Columns(gapStart, gapEnd).Hide();
-
-        ws.Columns().AdjustToContents(mapping.BankHeaderRow, mapping.BankHeaderRow);
+        ws.Columns().AdjustToContents(headerRow, headerRow);
     }
+
+    /// <summary>Wraps a worksheet name for use in an A1 cross-sheet formula
+    /// reference, escaping embedded single quotes the way Excel expects
+    /// ('It''s Sales'!A1). Quoting is applied unconditionally (harmless for
+    /// simple names) rather than only when the name contains a space, since
+    /// that's what Excel itself does when it writes such formulas.</summary>
+    private static string QuoteSheetName(string name) => $"'{name.Replace("'", "''")}'";
 
     /// <summary>Converts a 1-based Excel column number to its letter form
     /// (1 -> "A", 27 -> "AA", 28 -> "AB", ...).</summary>

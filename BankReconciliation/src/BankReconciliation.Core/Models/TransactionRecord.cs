@@ -37,6 +37,17 @@ public sealed class TransactionRecord
     /// (subset-sum) matching — see Rule 1 vs Rule 2 in the spec.</summary>
     public bool IsGroupedPosting { get; init; }
 
+    /// <summary>Raw text of the workbook's "Grouping" column — present on
+    /// BOTH sides now (unlike <see cref="Reference"/>, which is R365-only).
+    /// Empty/blank means "no grouping asserted, use normal matching." A
+    /// non-blank value is either a linking ID shared by rows on both sides
+    /// (which <see cref="Matching.GroupingMatcher"/> sums and matches as one
+    /// unit) or a named-rule keyword such as "Sysco" (claimed earlier in the
+    /// pipeline by <see cref="Matching.CombinationMatcher.RunSpecialComboRules"/>
+    /// before <see cref="Matching.GroupingMatcher"/> ever sees it — see that
+    /// class's remarks for why the pass order makes this distinction free).</summary>
+    public string GroupingKey { get; init; } = string.Empty;
+
     /// <summary>Short human-readable snippet (description/remark) shown in the
     /// UI grid — purely cosmetic, never used by the matching logic.</summary>
     public string DescriptionSnippet { get; init; } = string.Empty;
