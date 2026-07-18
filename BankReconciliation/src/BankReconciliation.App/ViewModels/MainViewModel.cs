@@ -384,7 +384,7 @@ public sealed class MainViewModel : ViewModelBase
         Process.Start(new ProcessStartInfo(LastLogFilePath) { UseShellExecute = true });
     }
 
-    private void ExportReport(object? _)
+    private void ExportReport()
     {
         if (_lastBankTransactions is null || _lastR365Transactions is null || string.IsNullOrEmpty(SelectedFilePath))
             return;
