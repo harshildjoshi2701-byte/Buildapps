@@ -11,8 +11,9 @@ public class ReconciliationEngineTests
     public async Task RunAsync_ExactMatchPreferredOverDateTolerantMatch()
     {
         // Bank txn could match either an exact-date R365 row or a 2-day-older
-        // one at the same amount. Pass 1 must claim the exact one, leaving
-        // the older one for something else (here: nothing, so it's NoMatch).
+        // one at the same amount. Exact matching must claim the exact one
+        // first, leaving the older one for something else (here: nothing, so
+        // it's NoMatch).
         var bank = new[] { Bank(1, 10, -500.00m) };
         var r365 = new[]
         {
@@ -34,8 +35,9 @@ public class ReconciliationEngineTests
     {
         // A bank transaction that could EITHER match a single R365 row
         // exactly OR be explained by a combination must take the single
-        // exact match (Pass 1/2 always run before Pass 3, and once matched a
-        // transaction is locked out of every later pass).
+        // exact match (exact and date-tolerant matching always run before
+        // combination search within a partition, and once matched a
+        // transaction is locked out of every later stage).
         var bank = new[] { Bank(1, 10, -100.00m) };
         var r365 = new[]
         {
@@ -100,9 +102,12 @@ public class ReconciliationEngineTests
         // sheet (e.g. every bank row on a single-account statement carrying
         // the same "Account Name" text in a misconfigured Grouping column)
         // must be reported as unmatched, never as BOTH matched and unmatched
-        // at once. GroupingMatcher locks these rows (IsMatched=true, to keep
-        // them out of later passes) but they are NOT a genuine match, so the
-        // summary must key off Status, not IsMatched.
+        // at once. All 50 rows share one "AP ACCOUNT" Grouping partition (see
+        // GroupingPartitioner) that is one-sided — nothing on the R365 side
+        // to compare against — so exact/date-tolerant/combination matching
+        // within the partition finds nothing, and FlagUnresolvedResidual is a
+        // no-op (it only fires when BOTH sides have leftovers) — every row
+        // falls through untouched to normal No Match finalization.
         var bank = new List<TransactionRecord>();
         for (int i = 0; i < 50; i++)
             bank.Add(Bank(i + 1, 0, 100.00m + i, groupingKey: "AP ACCOUNT"));
@@ -116,8 +121,57 @@ public class ReconciliationEngineTests
         Assert.Equal(0, summary.MatchedBankTransactions);
         Assert.Equal(50, summary.UnmatchedBankTransactions);
         Assert.All(bank, b => Assert.Equal(MatchStatus.NoMatch, b.Status));
-        Assert.All(bank, b => Assert.True(b.IsMatched)); // locked, but not a match — see above
+        Assert.All(bank, b => Assert.False(b.IsMatched)); // genuinely not a match, not just locked
         Assert.Empty(result.MatchGroups); // no genuine match to display as a group
+    }
+
+    [Fact]
+    public async Task RunAsync_LopsidedVendorTagGroup_FindsGenuineMatchesAndNeverBundlesLeftoversIntoOneReviewBlob()
+    {
+        // Regression test built directly from validating the fix against the
+        // user's real workbook: a "Sysco"-shaped Grouping value with 2,541
+        // Bank rows against 100 R365 rows, where only a handful of amounts
+        // are shared between the two sides at all. Reproduced here at a
+        // smaller but still lopsided scale. Two things must both hold:
+        //   1. The few genuine matches within the group are found despite
+        //      the group's massive size/imbalance (the actual production
+        //      bug — GroupingMatcher's bucket-sum-and-lock design gave up on
+        //      the entire group the moment its totals didn't tie out).
+        //   2. The hundreds of leftover rows that share nothing with
+        //      anything else do NOT get bundled into one giant Manual Review
+        //      comment (an earlier version of this fix's own
+        //      FlagUnresolvedResidual step did exactly that — see its
+        //      MaxResidualRowsToFlag remarks).
+        var bank = new List<TransactionRecord>();
+        for (int i = 0; i < 500; i++)
+            bank.Add(Bank(i + 1, 0, 1000.00m + i, groupingKey: "VendorX")); // $1000.00-$1499.00, all distinct
+        var r365 = new List<TransactionRecord>();
+        for (int i = 0; i < 15; i++)
+            r365.Add(R365(i + 1, 0, 9000.00m + i, groupingKey: "VendorX")); // $9000.00-$9014.00 — disjoint range
+        // Seed exactly 5 genuine matches by overwriting 5 R365 amounts to
+        // land exactly on 5 of the Bank amounts above (same day, so exact match applies).
+        r365[0] = R365(101, 0, 1010.00m, groupingKey: "VendorX");
+        r365[1] = R365(102, 0, 1050.00m, groupingKey: "VendorX");
+        r365[2] = R365(103, 0, 1123.00m, groupingKey: "VendorX");
+        r365[3] = R365(104, 0, 1250.00m, groupingKey: "VendorX");
+        r365[4] = R365(105, 0, 1499.00m, groupingKey: "VendorX");
+
+        var engine = new ReconciliationEngine();
+        var result = await engine.RunAsync(bank, r365, DefaultSettings());
+
+        var matchedBank = bank.Where(b => b.Status == MatchStatus.MatchedExact).ToList();
+        Assert.Equal(5, matchedBank.Count);
+        Assert.Equal(new[] { 1010.00m, 1050.00m, 1123.00m, 1250.00m, 1499.00m }, matchedBank.Select(b => b.AmountDollars).OrderBy(a => a));
+
+        // The remaining 495 Bank / 10 R365 rows have nothing to match and
+        // must be plain No Match, individually — never Manual Review, and
+        // critically never sharing one comment across hundreds of rows.
+        var unmatchedBank = bank.Where(b => b.Status != MatchStatus.MatchedExact).ToList();
+        Assert.Equal(495, unmatchedBank.Count);
+        Assert.All(unmatchedBank, b => Assert.Equal(MatchStatus.NoMatch, b.Status));
+        Assert.All(unmatchedBank, b => Assert.Contains("VendorX", b.Comment)); // Grouping context preserved per row
+        Assert.DoesNotContain(bank, b => b.Status == MatchStatus.ManualReview);
+        Assert.DoesNotContain(r365, r => r.Status == MatchStatus.ManualReview);
     }
 
     [Fact]

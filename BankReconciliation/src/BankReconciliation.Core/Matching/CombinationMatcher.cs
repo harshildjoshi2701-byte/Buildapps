@@ -7,29 +7,34 @@ namespace BankReconciliation.Core.Matching;
 /// Two independent matching mechanisms live in this class:
 ///
 ///   <see cref="RunSpecialComboRules"/> — user-configured named/curated
-///   rules (e.g. bank column 8 containing "Sysco" grouped against R365
-///   column 16 containing "Online"), a pure keyword filter with no amount or
-///   date check. Called directly and separately by
-///   <see cref="ReconciliationEngine"/> as its own pipeline stage BEFORE
-///   Pass 1 — see that method's remarks for why it runs first.
+///   rules (e.g. bank column 8 containing "Voided" grouped against R365
+///   column 16 containing "Voided" — see <see cref="SpecialComboRule"/>), a
+///   pure keyword filter with no amount or date check. Called directly and
+///   separately by <see cref="ReconciliationEngine"/> as its own pipeline
+///   stage BEFORE Grouping partitioning — see that method's remarks for why
+///   it runs first. Ships with no default rule (see
+///   <see cref="ReconciliationSettings.SpecialComboRules"/> remarks).
 ///
-///   <see cref="ProcessAll"/> — the general, date-windowed subset-sum search
-///   ("Pass 3" in the pipeline): for each bank transaction still unmatched
-///   after Passes 1, 2, and the named-rule stage, searches for a SUBSET of
-///   the still-unmatched, same-sign, in-date-window R365 transactions whose
-///   amounts sum exactly to the bank transaction's amount. This is
-///   subset-sum, which is NP-hard in general — the strategy below is layered
-///   so the overwhelming majority of real-world cases resolve via a fast,
-///   exact, polynomial-time path, and only the rare large/irregular case
-///   falls through to a bounded search that is guaranteed to terminate
+///   <see cref="ProcessAll"/> — the date-windowed subset-sum search, called
+///   once per Grouping partition by <see cref="ReconciliationEngine"/> (see
+///   its remarks): for each still-unmatched bank transaction IN THAT
+///   PARTITION, searches for a SUBSET of the still-unmatched, same-sign,
+///   in-date-window R365 transactions FROM THE SAME PARTITION whose amounts
+///   sum exactly to the bank transaction's amount — candidates from a
+///   different Grouping partition are never visible to a given call, because
+///   the caller only ever passes this method one partition's own lists. This
+///   is subset-sum, which is NP-hard in general — the strategy below is
+///   layered so the overwhelming majority of real-world cases resolve via a
+///   fast, exact, polynomial-time path, and only the rare large/irregular
+///   case falls through to a bounded search that is guaranteed to terminate
 ///   quickly by construction (see remarks on <see cref="FindCombination"/>).
-///   Runs the sweep THREE times over — the first sweep can leave
-///   transactions unresolved purely because other transactions were still
-///   occupying shared candidate pools; once those are claimed (by an earlier
-///   sweep, or by the named-rule stage before this class even ran), a later
-///   sweep over the now-smaller remaining pool can succeed where the first
-///   could not. A fourth sweep essentially never finds anything beyond what
-///   three find, so three is the practical fixed point.
+///   Runs the sweep THREE times over per partition — the first sweep can
+///   leave transactions unresolved purely because other transactions were
+///   still occupying shared candidate pools; once those are claimed (by an
+///   earlier sweep, or by the named-rule stage before this class even ran),
+///   a later sweep over the now-smaller remaining pool can succeed where the
+///   first could not. A fourth sweep essentially never finds anything beyond
+///   what three find, so three is the practical fixed point.
 ///
 /// Search strategy per transaction, cheapest and most certain first:
 ///   1. Exact 2-combination via a hash table                — O(n)
@@ -295,27 +300,28 @@ public static class CombinationMatcher
     // ---- Stage A: named pairing rules ------------------------------------------
 
     /// <summary>
-    /// Runs every user-configured <see cref="SpecialComboRule"/> (e.g. bank
-    /// rows whose column 8 contains "Sysco" grouped against R365 rows whose
-    /// column 16 contains "Online"). This is a pure keyword filter, not a
-    /// search: every still-unmatched bank row containing that rule's bank
-    /// keyword (in that rule's own bank column) and every still-unmatched
-    /// R365 row containing that rule's R365 keyword (in that rule's own R365
-    /// column) are grouped together as ONE match, unconditionally — no
-    /// amount, sign, or date check of any kind, and not restricted to a date
-    /// window. That is a deliberate, explicit design choice (not a search
-    /// that happens to ignore date): these are curated, asserted business
-    /// patterns where the presence of the keyword on both sides is itself
-    /// considered sufficient evidence, so a rule must never produce No Match
-    /// or Manual Review for a row it's eligible for. Any dollar gap between
-    /// the two sides is still visible via the K/AB audit-formula columns.
+    /// Runs every user-configured <see cref="SpecialComboRule"/> (see that
+    /// class's remarks — ships with no default rule). This is a pure keyword
+    /// filter, not a search: every still-unmatched bank row containing that
+    /// rule's bank keyword (in that rule's own bank column) and every
+    /// still-unmatched R365 row containing that rule's R365 keyword (in that
+    /// rule's own R365 column) are grouped together as ONE match,
+    /// unconditionally — no amount, sign, or date check of any kind, and not
+    /// restricted to a date window. That is a deliberate, explicit design
+    /// choice (not a search that happens to ignore date): these are curated,
+    /// asserted business patterns where the presence of the keyword on both
+    /// sides is itself considered sufficient evidence, so a rule must never
+    /// produce No Match or Manual Review for a row it's eligible for. Any
+    /// dollar gap between the two sides is still visible via the Bank/R365
+    /// Diff audit-formula columns (see <see cref="ColumnMapping.BankDiffColumn"/>
+    /// / <see cref="ColumnMapping.R365DiffColumn"/>).
     ///
     /// PUBLIC and called directly by <see cref="ReconciliationEngine"/> as
-    /// its own first pipeline stage, BEFORE Pass 1 — curated rules represent
-    /// asserted human knowledge, so they get first pick of the transaction
-    /// pool ahead of anything Pass 1/2/3 would otherwise (possibly
-    /// coincidentally) claim. Runs single-threaded — these pools are
-    /// normally small relative to the whole file.
+    /// its own first pipeline stage, BEFORE Grouping partitioning — curated
+    /// rules represent asserted human knowledge, so they get first pick of
+    /// the transaction pool ahead of anything the partitioned matching stages
+    /// would otherwise (possibly coincidentally) claim. Runs single-threaded
+    /// — these pools are normally small relative to the whole file.
     /// </summary>
     public static void RunSpecialComboRules(
         IReadOnlyList<TransactionRecord> bankTransactions,

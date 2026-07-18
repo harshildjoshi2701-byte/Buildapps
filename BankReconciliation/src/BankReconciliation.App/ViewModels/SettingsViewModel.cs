@@ -38,9 +38,9 @@ public sealed class SettingsViewModel : ViewModelBase
 
     /// <summary>Backs the "Custom Matching Rules" list in Settings — each
     /// entry is a user-editable, unconditional keyword-pairing rule that
-    /// runs BEFORE Pass 1 (see <see cref="Matching.ReconciliationEngine"/>).
-    /// Ships with one default rule (Sysco/Online, columns 8/16) but is fully
-    /// add/remove/edit-able from the UI.</summary>
+    /// runs BEFORE Grouping partitioning (see <see cref="Matching.ReconciliationEngine"/>).
+    /// Ships empty by default (see <see cref="Models.ReconciliationSettings.SpecialComboRules"/>
+    /// remarks) but is fully add/remove/edit-able from the UI.</summary>
     public ObservableCollection<SpecialComboRuleViewModel> SpecialComboRules { get; }
 
     private SpecialComboRuleViewModel WrapRule(SpecialComboRule rule) =>

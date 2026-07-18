@@ -147,7 +147,7 @@
 
                 <TextBlock Text="Custom Matching Rules (Advanced)" Style="{StaticResource SectionHeaderStyle}"/>
                 <TextBlock Style="{StaticResource MutedTextStyle}" TextWrapping="Wrap" Margin="0,0,0,10"
-                           Text="Every bank row whose column contains the bank keyword is grouped with every R365 row whose column contains the R365 keyword — unconditionally, no amount or date check. Runs first, before every other pass, including Grouping-column matching. Ships with one rule (Bank column 8 / R365 Grouping column both contain &quot;Sysco&quot;); add more for other known patterns."/>
+                           Text="Every bank row whose column contains the bank keyword is grouped with every R365 row whose column contains the R365 keyword — unconditionally, no amount or date check. Runs first, before every other stage, including Grouping-column matching. Ships empty — the Grouping column already handles a shared tag like a vendor name correctly on its own; add a rule here only for a different, genuinely-known pairing that should always be grouped unconditionally."/>
 
                 <ItemsControl ItemsSource="{Binding SpecialComboRules}">
                     <ItemsControl.ItemTemplate>

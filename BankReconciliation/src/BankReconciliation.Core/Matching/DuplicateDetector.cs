@@ -57,15 +57,21 @@ public static class DuplicateDetector
 
         foreach (var t in stillUnmatched)
         {
+            // A non-blank Grouping value is worth surfacing even in a plain
+            // No Match/Possible Duplicate comment — it's the one piece of
+            // context (e.g. which vendor tag or linking ID this row carried)
+            // a user would otherwise have to go look up by hand.
+            var groupingSuffix = string.IsNullOrWhiteSpace(t.GroupingKey) ? string.Empty : $" (Grouping \"{t.GroupingKey}\")";
+
             if (duplicateRows.Contains(t.RowNumber))
             {
                 t.Status = MatchStatus.PossibleDuplicate;
-                t.Comment = "Possible Duplicate (matches another unmatched transaction on the same date and amount)";
+                t.Comment = $"Possible Duplicate (matches another unmatched transaction on the same date and amount){groupingSuffix}";
             }
             else
             {
                 t.Status = MatchStatus.NoMatch;
-                t.Comment = "No Match";
+                t.Comment = $"No Match{groupingSuffix}";
             }
         }
     }

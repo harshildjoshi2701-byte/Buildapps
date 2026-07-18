@@ -3,14 +3,18 @@ using BankReconciliation.Core.Models;
 namespace BankReconciliation.Core.Matching;
 
 /// <summary>
-/// Implements Pass 1 (exact amount + exact date) and Pass 2 (exact amount +
-/// date within the allowed window). Both are strict one-to-one: exactly one
-/// bank transaction to exactly one R365 transaction, no combinations — this
-/// applies to EVERY R365 row regardless of whether it's flagged as a grouped
-/// posting (Rule 1 vs Rule 2 only changes what Pass 3 is allowed to do with
-/// the *leftovers*; every row is still eligible for a plain 1:1 match first).
+/// Implements exact matching (exact amount + exact date) and date-tolerant
+/// matching (exact amount + date within the allowed window). Both are strict
+/// one-to-one: exactly one bank transaction to exactly one R365 transaction,
+/// no combinations — this applies to EVERY R365 row regardless of whether
+/// it's flagged as a grouped posting (that flag only changes what combination
+/// search is allowed to do with the *leftovers*; every row is still eligible
+/// for a plain 1:1 match first). Called once per Grouping partition by
+/// <see cref="ReconciliationEngine"/> (see its remarks) — every candidate
+/// list passed in is already scoped to a single partition, so there is
+/// nothing partition-specific in this class itself.
 ///
-/// Both passes share the same shape: index the unmatched R365 pool by exact
+/// Both methods share the same shape: index the unmatched R365 pool by exact
 /// signed amount (O(1) average lookup), then for each unmatched bank
 /// transaction look up its amount bucket and pick the best candidate by the
 /// tie-break priority from the spec: exact date, fewest transactions (always
@@ -64,8 +68,8 @@ public static class OneToOneMatcher
     }
 
     /// <summary>
-    /// Pass 1: exact amount, exact date, one-to-one. Locks both sides
-    /// immediately on every match. Returns the number of matches made.
+    /// Exact amount, exact date, one-to-one. Locks both sides immediately on
+    /// every match. Returns the number of matches made.
     /// </summary>
     public static int MatchExact(IReadOnlyList<TransactionRecord> bankTransactions, IReadOnlyList<TransactionRecord> r365Transactions, GroupIdGenerator groupIds)
     {
@@ -95,8 +99,10 @@ public static class OneToOneMatcher
     }
 
     /// <summary>
-    /// Pass 2: exact amount, date within [bankDate - maxDays, bankDate],
-    /// one-to-one. Only ever looks at transactions Pass 1 left unmatched.
+    /// Exact amount, date within [bankDate - maxDays, bankDate], one-to-one
+    /// (backward only — R365 is never allowed to be newer than the bank
+    /// date). Only ever looks at transactions <see cref="MatchExact"/> left
+    /// unmatched.
     /// </summary>
     public static int MatchDateTolerant(IReadOnlyList<TransactionRecord> bankTransactions, IReadOnlyList<TransactionRecord> r365Transactions, int maxDateDifferenceDays, GroupIdGenerator groupIds)
     {

@@ -169,15 +169,17 @@ public class CombinationMatcherTests
     }
 
     // ---- RunSpecialComboRules (named/curated rules — a separate pipeline
-    // stage from ProcessAll, called on its own, BEFORE Pass 1) -------------
+    // stage from ProcessAll, called on its own, BEFORE Grouping partitioning) ----
 
     [Fact]
     public void RunSpecialComboRules_MatchesAcrossWideDateGapIgnoringNormalWindow()
     {
-        // The default named rule (bank column 5 contains "Sysco" <-> R365
-        // Grouping column 4 also contains "Sysco") must group rows even when
-        // they are much further apart than MaxDateDifferenceDays allows,
-        // since named rules are not subject to the normal date window at all.
+        // A named rule (bank column 5 contains "Sysco" <-> R365 column 4 also
+        // contains "Sysco") must group rows even when they are much further
+        // apart than MaxDateDifferenceDays allows, since named rules are not
+        // subject to the normal date window at all. Ships with no default
+        // rule (see ReconciliationSettings.SpecialComboRules remarks), so
+        // this test defines its own to exercise the mechanism.
         var bank = new[]
         {
             new TransactionRecord
@@ -197,6 +199,10 @@ public class CombinationMatcherTests
         };
         var settings = DefaultSettings();
         settings.MaxDateDifferenceDays = 6; // far narrower than the gap above
+        settings.SpecialComboRules = new List<SpecialComboRule>
+        {
+            new() { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
+        };
         var stats = new CombinationMatcher.SearchStats();
 
         CombinationMatcher.RunSpecialComboRules(bank, r365, settings, new GroupIdGenerator(), stats, CancellationToken.None);
@@ -232,6 +238,10 @@ public class CombinationMatcherTests
         };
         var settings = DefaultSettings();
         settings.MaxDateDifferenceDays = 6;
+        settings.SpecialComboRules = new List<SpecialComboRule>
+        {
+            new() { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
+        };
         var stats = new CombinationMatcher.SearchStats();
 
         CombinationMatcher.RunSpecialComboRules(bank, r365, settings, new GroupIdGenerator(), stats, CancellationToken.None);
@@ -264,6 +274,10 @@ public class CombinationMatcherTests
             new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 6), AmountCents = -6000, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
         };
         var settings = DefaultSettings();
+        settings.SpecialComboRules = new List<SpecialComboRule>
+        {
+            new() { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
+        };
         var stats = new CombinationMatcher.SearchStats();
 
         CombinationMatcher.RunSpecialComboRules(bank, r365, settings, new GroupIdGenerator(), stats, CancellationToken.None);
@@ -311,6 +325,10 @@ public class CombinationMatcherTests
             new TransactionRecord { RowNumber = 2, Side = TransactionSide.R365, Date = new DateTime(2026, 12, 18), AmountCents = 99999, RawColumns = new Dictionary<int, string> { [4] = "Sysco" } },
         };
         var settings = DefaultSettings();
+        settings.SpecialComboRules = new List<SpecialComboRule>
+        {
+            new() { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
+        };
         var stats = new CombinationMatcher.SearchStats();
 
         CombinationMatcher.RunSpecialComboRules(bank, r365, settings, new GroupIdGenerator(), stats, CancellationToken.None);
@@ -347,6 +365,10 @@ public class CombinationMatcherTests
             new TransactionRecord { RowNumber = 1, Side = TransactionSide.R365, Date = new DateTime(2026, 6, 1), AmountCents = -18000, RawColumns = new Dictionary<int, string> { [4] = "Check #4471" } },
         };
         var settings = DefaultSettings();
+        settings.SpecialComboRules = new List<SpecialComboRule>
+        {
+            new() { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
+        };
         var stats = new CombinationMatcher.SearchStats();
 
         CombinationMatcher.RunSpecialComboRules(bank, r365, settings, new GroupIdGenerator(), stats, CancellationToken.None);

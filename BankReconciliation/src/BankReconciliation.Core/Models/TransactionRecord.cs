@@ -39,13 +39,16 @@ public sealed class TransactionRecord
 
     /// <summary>Raw text of the workbook's "Grouping" column — present on
     /// BOTH sides now (unlike <see cref="Reference"/>, which is R365-only).
-    /// Empty/blank means "no grouping asserted, use normal matching." A
-    /// non-blank value is either a linking ID shared by rows on both sides
-    /// (which <see cref="Matching.GroupingMatcher"/> sums and matches as one
-    /// unit) or a named-rule keyword such as "Sysco" (claimed earlier in the
-    /// pipeline by <see cref="Matching.CombinationMatcher.RunSpecialComboRules"/>
-    /// before <see cref="Matching.GroupingMatcher"/> ever sees it — see that
-    /// class's remarks for why the pass order makes this distinction free).</summary>
+    /// Empty/blank means "no grouping asserted, use normal matching against
+    /// every other ungrouped row." A non-blank value partitions this row into
+    /// a private candidate pool shared only with other rows carrying the same
+    /// value (case-insensitive) — see <see cref="Matching.GroupingPartitioner"/>.
+    /// This covers both a true linking ID (a handful of rows on each side
+    /// that sum together) and a vendor/category tag like "Sysco" (many rows
+    /// on one side, few on the other, most of which have a genuine individual
+    /// match once the search is scoped to just that tag) — partitioning first
+    /// and then running the normal matchers handles both without needing to
+    /// tell them apart.</summary>
     public string GroupingKey { get; init; } = string.Empty;
 
     /// <summary>Short human-readable snippet (description/remark) shown in the

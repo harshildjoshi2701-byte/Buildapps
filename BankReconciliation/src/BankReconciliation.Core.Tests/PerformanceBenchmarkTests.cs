@@ -52,19 +52,26 @@ public class PerformanceBenchmarkTests
     /// rows are plain exact or date-tolerant matches, a slice carries shared
     /// Grouping IDs (2-6 R365 rows per bank row), a slice needs genuine
     /// combination search, and a slice is deliberately unmatched — so the
-    /// benchmark exercises every pass, not just the cheap ones.
+    /// benchmark exercises every stage, not just the cheap ones.
     ///
     /// Each category's amount magnitude is drawn from a DISJOINT band
     /// ($20k-$100k plain, $10-$300 grouped members, $1k-$4k combination
-    /// members) — an earlier version shared ranges across categories and
-    /// individual combination-search members kept coincidentally colliding
-    /// with unrelated plain-category exact-match targets, so Pass 3 (exact
-    /// match, which runs before the general combination sweep) silently
-    /// cannibalized them before combination search ever got a chance,
-    /// masking that code path from this benchmark entirely. Dates spread
-    /// across a full year rather than a narrow window, too, so same-window
-    /// candidate pools stay well under MaxCombinationPoolSize (600) and
-    /// don't trigger the "pool truncated, don't guess" safety valve.</summary>
+    /// members). The plain and combination categories both land in the same
+    /// blank-Grouping partition and could still collide with each other by
+    /// amount if their ranges overlapped — an earlier version shared ranges
+    /// and individual combination-search members kept coincidentally
+    /// colliding with unrelated plain-category exact-match targets, so exact
+    /// matching (which runs before combination search within any partition)
+    /// silently cannibalized them before combination search ever got a
+    /// chance, masking that code path from this benchmark entirely. (The
+    /// grouped category doesn't need a disjoint band for this reason — each
+    /// grouped bank row gets its own unique Grouping key, hence its own
+    /// partition, so it can never collide with plain or combination rows
+    /// regardless of amount; it keeps a distinct band anyway for clarity when
+    /// reading a failure.) Dates spread across a full year rather than a
+    /// narrow window, too, so same-window candidate pools stay well under
+    /// MaxCombinationPoolSize (600) and don't trigger the "pool truncated,
+    /// don't guess" safety valve.</summary>
     private static (List<TransactionRecord> Bank, List<TransactionRecord> R365) GenerateRealisticDataset(int bankCount, int r365Count)
     {
         var rnd = new Random(12345); // fixed seed: reproducible timing runs
@@ -92,8 +99,9 @@ public class PerformanceBenchmarkTests
 
         // Grouping-linked: one bank row summed against 2-6 R365 rows sharing
         // a Grouping ID. Band: $10-$300 per member. Safe from cross-category
-        // collision regardless of range overlap, since GroupingMatcher (Pass
-        // 2) claims these before Pass 3's exact match ever sees them.
+        // collision regardless of range overlap, since each bank row here
+        // gets its own unique Grouping key and therefore its own partition —
+        // see GroupingPartitioner remarks.
         for (int i = 0; i < groupedBankCount; i++)
         {
             var key = $"G{i}";

@@ -18,13 +18,13 @@ public enum MatchStatus
     /// <summary>Not yet processed (initial state).</summary>
     Unmatched,
 
-    /// <summary>Pass 1: one-to-one, exact amount, exact date. Green.</summary>
+    /// <summary>One-to-one, exact amount, exact date. Green.</summary>
     MatchedExact,
 
-    /// <summary>Pass 2: one-to-one, exact amount, date within the allowed window. Green.</summary>
+    /// <summary>One-to-one, exact amount, date within the allowed window. Green.</summary>
     MatchedDateTolerant,
 
-    /// <summary>Pass 3: one bank transaction matched to a combination of 2+ R365
+    /// <summary>One bank transaction matched to a combination of 2+ R365
     /// transactions whose amounts sum exactly to it. Blue-family (per-group color).</summary>
     MatchedCombination,
 

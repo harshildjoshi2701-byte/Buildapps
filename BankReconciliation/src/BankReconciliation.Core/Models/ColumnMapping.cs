@@ -13,7 +13,7 @@ namespace BankReconciliation.Core.Models;
 ///
 /// AS OF THIS VERSION: two separate worksheets, each with its own column
 /// range starting at A, plus a "Grouping" column on both sheets (see
-/// <see cref="Matching.GroupingMatcher"/>). The defaults below are CONFIRMED
+/// <see cref="Matching.GroupingPartitioner"/>). The defaults below are CONFIRMED
 /// against a real reconciled output file the user provided (title row 1,
 /// an instructional row 2, blank row 3, headers on row 4, data from row 5) —
 /// not guesses. The one field that was wrong in practice (Bank Grouping,

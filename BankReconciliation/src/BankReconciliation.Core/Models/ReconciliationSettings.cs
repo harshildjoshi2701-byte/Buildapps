@@ -30,7 +30,7 @@ public sealed class ReconciliationSettings
 
     /// <summary>When true, only R365 rows whose Ref# column contains the
     /// grouped-posting keyword (see <see cref="ColumnMapping.GroupKeyword"/>)
-    /// are eligible for Pass 3 combination matching (the original spec's Rule
+    /// are eligible for combination matching (the original spec's Rule
     /// 1/Rule 2 split). When false (the default), EVERY still-unmatched R365
     /// row is eligible for combination matching regardless of what is in that
     /// column — real-world data often has legitimate combinable postings that
@@ -38,23 +38,26 @@ public sealed class ReconciliationSettings
     public bool RequireGroupKeywordForCombinations { get; set; } = false;
 
     /// <summary>Named, curated keyword-grouping rules, unconditional and
-    /// unrestricted by the normal date window. See <see cref="SpecialComboRule"/>
-    /// and <see cref="Matching.CombinationMatcher"/> remarks.
+    /// unrestricted by the normal date window: every eligible row on both
+    /// sides is grouped into ONE match together regardless of amount, sign,
+    /// or date. See <see cref="SpecialComboRule"/> and
+    /// <see cref="Matching.CombinationMatcher"/> remarks.
     ///
-    /// The shipped default rule targets the Grouping column on BOTH sides
-    /// (column 5 / column 4 — see <see cref="ColumnMapping.BankGroupingColumn"/>
-    /// and <see cref="ColumnMapping.R365GroupingColumn"/>), checking for the
-    /// literal value "Sysco" on each: the real workbook's Grouping column was
-    /// found to hold "Sysco" as a keyword tag that never sum-matches (unlike
-    /// every other Grouping value, which is a numeric linking ID that DOES
-    /// sum-match). Keeping Sysco on this named-rule mechanism rather than
-    /// folding it into <see cref="Matching.GroupingMatcher"/>'s bucket-and-sum
-    /// logic is deliberate — see that class's remarks for why running named
-    /// rules first makes the split correct with no special-casing required.</summary>
-    public List<SpecialComboRule> SpecialComboRules { get; set; } = new()
-    {
-        new SpecialComboRule { BankColumn = 5, BankKeyword = "Sysco", R365Column = 4, R365Keyword = "Sysco" },
-    };
+    /// Ships EMPTY by default — no named rule is safe to apply unconditionally
+    /// to an arbitrary column without knowing the real data shape. An earlier
+    /// default lumped every Grouping-column row containing "Sysco" together
+    /// unconditionally (2,541 Bank rows against 100 R365 rows in a real
+    /// workbook), which is exactly wrong for a vendor tag: most of those rows
+    /// have a perfectly good individual match that this mechanism would have
+    /// steamrolled by force-grouping all of them into one blob before any
+    /// real matching got a chance. <see cref="Matching.GroupingPartitioner"/>
+    /// now handles vendor/category tags like "Sysco" correctly and generically
+    /// — every non-blank Grouping value gets its own scoped exact/date-tolerant/
+    /// combination search — so no default named rule is needed for that case
+    /// anymore. This mechanism remains fully available and UI-editable for a
+    /// genuinely curated, known-in-advance pairing on some OTHER column where
+    /// unconditional grouping really is the right call.</summary>
+    public List<SpecialComboRule> SpecialComboRules { get; set; } = new();
 
     /// <summary>Confidence score assigned to every match found by a
     /// <see cref="SpecialComboRules"/> rule. These are curated, high-trust
@@ -89,11 +92,16 @@ public sealed class ReconciliationSettings
     /// search before it gives up and flags Manual Review.</summary>
     public double PerTransactionTimeBudgetSeconds { get; set; } = 5.0;
 
-    /// <summary>Overall wall-clock budget for the whole Pass 3 sweep (applied
-    /// separately to each of the three general sweeps — see
-    /// <see cref="Matching.CombinationMatcher"/> remarks). Exists as a
-    /// last-resort circuit breaker so a pathological file can never hang the
-    /// UI indefinitely; remaining transactions are flagged Manual Review.</summary>
+    /// <summary>Overall wall-clock budget for combination search, enforced
+    /// TWICE over: once per individual sweep within one Grouping partition
+    /// (applied separately to each of the three general sweeps — see
+    /// <see cref="Matching.CombinationMatcher"/> remarks), and again in
+    /// aggregate across every partition in the run (see
+    /// <see cref="Matching.ReconciliationEngine"/> remarks) — a real workbook
+    /// can easily have a hundred-plus distinct Grouping values, so the
+    /// per-partition budget alone can't bound the total time spent.  Exists
+    /// as a last-resort circuit breaker so a pathological file can never hang
+    /// the UI indefinitely; remaining transactions are flagged Manual Review.</summary>
     public double GlobalCombinationTimeBudgetSeconds { get; set; } = 120.0;
 
     // ---- Threading ------------------------------------------------------------
